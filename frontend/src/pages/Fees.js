@@ -293,8 +293,8 @@ const Fees = () => {
                                 <Download className="w-3 h-3" />Invoice
                               </a>
                             )}
-                            {p.status !== 'reverted' && p.paymentMode !== 'concession' && (
-                              {showEdit && <button onClick={async () => { if (!window.confirm('Revert this payment?')) return; try { await api.revertPayment(p.id); toast.success('Payment reverted'); handleSearchStudent(); } catch (e) { toast.error('Failed to revert'); } }} data-testid={`revert-${p.id}`} className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-xl font-bold text-xs transition-colors">Revert</button>}
+                            {p.status !== 'reverted' && p.paymentMode !== 'concession' && showEdit && (
+                              <button onClick={async () => { if (!window.confirm('Revert this payment?')) return; try { await api.revertPayment(p.id); toast.success('Payment reverted'); handleSearchStudent(); } catch (e) { toast.error('Failed to revert'); } }} data-testid={`revert-${p.id}`} className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-xl font-bold text-xs transition-colors">Revert</button>
                             )}
                           </div>
                         </div>
