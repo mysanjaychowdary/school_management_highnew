@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 const Approvals = () => {
   const { user, role } = useAuth();
   const isTeacher = role === 'teacher';
+  const showConcessions = role === 'super_admin'; // concessions only for super_admin
   const [activeTab, setActiveTab] = useState('leave');
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [concessions, setConcessions] = useState([]);

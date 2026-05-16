@@ -365,6 +365,39 @@ class LeaveRequestCreate(BaseModel):
     reason: str
     attachmentUrl: Optional[str] = None
 
+class MarkEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    studentId: str
+    studentCode: str
+    studentName: str
+    studentClass: str
+    section: str
+    examName: str
+    subject: str
+    marks: float
+    maxMarks: float = 100
+    recordedBy: str = ""
+    recordedOn: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class MarkRow(BaseModel):
+    studentCode: str
+    studentName: Optional[str] = ""
+    examName: str
+    subject: str
+    marks: float
+    maxMarks: Optional[float] = 100
+
+class MarksBulkCreate(BaseModel):
+    studentClass: str
+    section: str
+    examName: str
+    subject: str
+    maxMarks: Optional[float] = 100
+    recordedBy: Optional[str] = ""
+    rows: List[MarkRow]
+
+
 # ==================== WHATSAPP SERVICE ====================
 
 BASE_WA_URL = "https://crm.abhiit.com/api/meta/v19.0"
@@ -1373,6 +1406,168 @@ async def reject_leave_request(request_id: str, data: Optional[Dict] = None):
     await db.leave_requests.update_one({"id": request_id}, {"$set": {"status": "rejected", "rejectedBy": rejected_by}})
     return {"message": "Leave rejected"}
 
+# ==================== MARKS ROUTES ====================
+
+@api_router.get("/marks/sample-csv")
+async def marks_sample_csv(studentClass: str, section: str):
+    students = await db.students.find({"studentClass": studentClass, "section": section}, {"_id": 0}).to_list(10000)
+    if not students:
+        raise HTTPException(status_code=404, detail="No students found for this class & section")
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Student ID", "Name", "Exam Name", "Subject", "Marks", "Max Marks"])
+    # Pre-fill student id + name; leave exam/subject/marks blank for teacher to fill
+    students.sort(key=lambda s: str(s.get('rollNo', '')))
+    for s in students:
+        writer.writerow([s.get('studentCode', s.get('rollNo', '')), s.get('studentName', ''), '', '', '', '100'])
+    output.seek(0)
+    return StreamingResponse(io.BytesIO(output.getvalue().encode('utf-8')), media_type="text/csv",
+                             headers={"Content-Disposition": f"attachment; filename=marks_template_{studentClass}_{section}.csv"})
+
+@api_router.post("/marks/bulk")
+async def create_marks_bulk(data: MarksBulkCreate):
+    if not data.rows:
+        raise HTTPException(status_code=400, detail="No rows provided")
+    created = 0
+    errors = []
+    for row in data.rows:
+        student = await db.students.find_one({"studentCode": row.studentCode}, {"_id": 0})
+        if not student:
+            errors.append(f"{row.studentCode}: not found")
+            continue
+        exam_name = (row.examName or data.examName).strip()
+        subject = (row.subject or data.subject).strip()
+        if not exam_name or not subject:
+            errors.append(f"{row.studentCode}: missing exam name or subject")
+            continue
+        max_marks = row.maxMarks or data.maxMarks or 100
+        # Upsert: replace existing record for the same student+exam+subject
+        await db.marks.delete_many({
+            "studentId": student['id'], "examName": exam_name, "subject": subject
+        })
+        entry = MarkEntry(
+            studentId=student['id'], studentCode=row.studentCode,
+            studentName=student.get('studentName', ''),
+            studentClass=data.studentClass, section=data.section,
+            examName=exam_name, subject=subject,
+            marks=float(row.marks), maxMarks=float(max_marks),
+            recordedBy=data.recordedBy or 'Teacher'
+        )
+        doc = entry.model_dump()
+        doc['recordedOn'] = doc['recordedOn'].isoformat()
+        await db.marks.insert_one(doc)
+        created += 1
+    return {"created": created, "errors": errors}
+
+@api_router.get("/marks")
+async def get_marks(studentId: Optional[str] = None, studentClass: Optional[str] = None,
+                    section: Optional[str] = None, examName: Optional[str] = None,
+                    subject: Optional[str] = None):
+    query = {}
+    if studentId: query['studentId'] = studentId
+    if studentClass: query['studentClass'] = studentClass
+    if section: query['section'] = section
+    if examName: query['examName'] = examName
+    if subject: query['subject'] = subject
+    return await db.marks.find(query, {"_id": 0}).sort("recordedOn", -1).to_list(10000)
+
+@api_router.get("/marks/distinct")
+async def get_marks_distinct():
+    """Return distinct exams and subjects available."""
+    exams = await db.marks.distinct("examName")
+    subjects = await db.marks.distinct("subject")
+    classes_in_marks = await db.marks.distinct("studentClass")
+    return {"exams": sorted([e for e in exams if e]), "subjects": sorted([s for s in subjects if s]),
+            "classes": sorted([c for c in classes_in_marks if c])}
+
+@api_router.get("/marks/stats")
+async def get_marks_stats(studentClass: Optional[str] = None, section: Optional[str] = None,
+                          examName: Optional[str] = None, subject: Optional[str] = None,
+                          compareExamA: Optional[str] = None, compareExamB: Optional[str] = None):
+    """Aggregated statistics for analytics dashboards."""
+    base_query = {}
+    if studentClass: base_query['studentClass'] = studentClass
+    if section: base_query['section'] = section
+    if subject: base_query['subject'] = subject
+
+    # For single exam filter
+    single_q = dict(base_query)
+    if examName: single_q['examName'] = examName
+
+    marks_records = await db.marks.find(single_q, {"_id": 0}).to_list(10000)
+
+    # Overall metrics
+    pct_list = [(m['marks'] / m['maxMarks'] * 100) if m.get('maxMarks') else 0 for m in marks_records]
+    overall = {
+        "totalEntries": len(marks_records),
+        "averagePct": round(sum(pct_list) / len(pct_list), 2) if pct_list else 0,
+        "highestPct": round(max(pct_list), 2) if pct_list else 0,
+        "lowestPct": round(min(pct_list), 2) if pct_list else 0,
+        "passCount": sum(1 for p in pct_list if p >= 33),
+        "failCount": sum(1 for p in pct_list if p < 33),
+    }
+
+    # Group by subject -> average pct
+    subj_map = {}
+    for m in marks_records:
+        s = m.get('subject', 'Unknown')
+        if s not in subj_map: subj_map[s] = []
+        pct = (m['marks'] / m['maxMarks'] * 100) if m.get('maxMarks') else 0
+        subj_map[s].append(pct)
+    bySubject = [{"subject": k, "average": round(sum(v) / len(v), 2), "count": len(v)} for k, v in subj_map.items()]
+    bySubject.sort(key=lambda x: x['subject'])
+
+    # Grade distribution buckets
+    buckets = {"A+ (90+)": 0, "A (75-89)": 0, "B (60-74)": 0, "C (45-59)": 0, "D (33-44)": 0, "F (<33)": 0}
+    for p in pct_list:
+        if p >= 90: buckets["A+ (90+)"] += 1
+        elif p >= 75: buckets["A (75-89)"] += 1
+        elif p >= 60: buckets["B (60-74)"] += 1
+        elif p >= 45: buckets["C (45-59)"] += 1
+        elif p >= 33: buckets["D (33-44)"] += 1
+        else: buckets["F (<33)"] += 1
+    grades = [{"grade": k, "count": v} for k, v in buckets.items()]
+
+    # Top students (top 10)
+    student_map = {}
+    for m in marks_records:
+        sid = m['studentId']
+        if sid not in student_map:
+            student_map[sid] = {"studentId": sid, "studentName": m.get('studentName', ''),
+                                "studentCode": m.get('studentCode', ''), "marks": 0, "max": 0}
+        student_map[sid]['marks'] += m['marks']
+        student_map[sid]['max'] += m.get('maxMarks', 100)
+    students_stats = []
+    for v in student_map.values():
+        pct = (v['marks'] / v['max'] * 100) if v['max'] else 0
+        students_stats.append({**v, "pct": round(pct, 2)})
+    students_stats.sort(key=lambda x: x['pct'], reverse=True)
+    topStudents = students_stats[:10]
+
+    # Compare two exams
+    compare = None
+    if compareExamA and compareExamB:
+        a_q = dict(base_query); a_q['examName'] = compareExamA
+        b_q = dict(base_query); b_q['examName'] = compareExamB
+        rec_a = await db.marks.find(a_q, {"_id": 0}).to_list(10000)
+        rec_b = await db.marks.find(b_q, {"_id": 0}).to_list(10000)
+        def avg_by_subject(records):
+            mp = {}
+            for r in records:
+                s = r.get('subject', 'Unknown')
+                if s not in mp: mp[s] = []
+                pct = (r['marks'] / r['maxMarks'] * 100) if r.get('maxMarks') else 0
+                mp[s].append(pct)
+            return {k: round(sum(v) / len(v), 2) for k, v in mp.items()}
+        a_subj = avg_by_subject(rec_a)
+        b_subj = avg_by_subject(rec_b)
+        all_subj = sorted(set(list(a_subj.keys()) + list(b_subj.keys())))
+        compare = [{"subject": s, compareExamA: a_subj.get(s, 0), compareExamB: b_subj.get(s, 0)} for s in all_subj]
+
+    return {"overall": overall, "bySubject": bySubject, "grades": grades,
+            "topStudents": topStudents, "compare": compare}
+
+
 # ==================== EXPENSE ROUTES ====================
 
 @api_router.post("/expenses", response_model=Expense)
@@ -1645,6 +1840,7 @@ async def parent_dashboard(student_id: str):
         "recentAttendance": attendance[-30:] if attendance else [],
         "fullAttendance": attendance,
         "payments": payments, "events": events, "homework": homework,
+        "marks": await db.marks.find({"studentId": student['id']}, {"_id": 0}).sort("recordedOn", -1).to_list(1000),
         "feeStructure": {
             "term1": {"total": student.get('feeTerm1', 0), "paid": paid_terms.get('term1', 0)},
             "term2": {"total": student.get('feeTerm2', 0), "paid": paid_terms.get('term2', 0)},

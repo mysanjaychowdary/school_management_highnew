@@ -13,6 +13,7 @@ import EventCalendar from './pages/EventCalendar';
 import HomeworkPage from './pages/HomeworkPage';
 import StaffPage from './pages/StaffPage';
 import Approvals from './pages/Approvals';
+import Marks from './pages/Marks';
 import Settings from './pages/Settings';
 import ParentPortal from './pages/ParentPortal';
 import LoginPage from './pages/LoginPage';
@@ -54,6 +55,7 @@ const AppRoutes = () => {
         <Route path="homework" element={<ProtectedRoute path="/homework"><HomeworkPage /></ProtectedRoute>} />
         <Route path="staff" element={<ProtectedRoute path="/staff"><StaffPage /></ProtectedRoute>} />
         <Route path="approvals" element={<ProtectedRoute path="/approvals"><Approvals /></ProtectedRoute>} />
+        <Route path="marks" element={<ProtectedRoute path="/marks"><Marks /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute path="/settings"><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultRoute(role)} replace />} />
       </Route>

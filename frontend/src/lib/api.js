@@ -127,6 +127,13 @@ export const api = {
   approveLeaveRequest: (id, data) => axios.post(`${API}/leave-requests/${id}/approve`, data || {}),
   rejectLeaveRequest: (id, data) => axios.post(`${API}/leave-requests/${id}/reject`, data || {}),
 
+  // Marks
+  getMarksSampleCSV: (params) => axios.get(`${API}/marks/sample-csv`, { params, responseType: 'blob' }),
+  createMarksBulk: (data) => axios.post(`${API}/marks/bulk`, data),
+  getMarks: (params) => axios.get(`${API}/marks`, { params }),
+  getMarksDistinct: () => axios.get(`${API}/marks/distinct`),
+  getMarksStats: (params) => axios.get(`${API}/marks/stats`, { params }),
+
   // Invoice
   getInvoiceUrl: (paymentId) => `${API}/fees/invoice/${paymentId}`,
 };

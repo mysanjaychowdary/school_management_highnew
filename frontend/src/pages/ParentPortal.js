@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, Menu, X, FileText, Send } from 'lucide-react';
+import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, Menu, X, FileText, Send, BarChart3 } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
@@ -117,6 +117,7 @@ const ParentPortal = () => {
     { key: 'overview', label: 'Overview', icon: GraduationCap },
     { key: 'attendance', label: 'Attendance', icon: ClipboardCheck },
     { key: 'fees', label: 'Fees', icon: DollarSign },
+    { key: 'marks', label: 'Marks', icon: BarChart3 },
     { key: 'events', label: 'Events', icon: CalendarDays },
     { key: 'homework', label: 'Homework', icon: BookOpenCheck },
     { key: 'leave', label: 'Leave', icon: FileText },
@@ -437,6 +438,50 @@ const ParentPortal = () => {
             </div>
           </div>
         )}
+
+        {/* ========= MARKS ========= */}
+        {activeTab === 'marks' && (() => {
+          const marks = dashData.marks || [];
+          // Group by exam
+          const examMap = {};
+          marks.forEach((m) => {
+            if (!examMap[m.examName]) examMap[m.examName] = { exam: m.examName, items: [], total: 0, max: 0 };
+            examMap[m.examName].items.push(m);
+            examMap[m.examName].total += m.marks;
+            examMap[m.examName].max += m.maxMarks || 100;
+          });
+          const exams = Object.values(examMap).sort((a, b) => a.exam.localeCompare(b.exam));
+          return (
+            <div className="space-y-4">
+              {exams.length === 0 && <div className="bg-white rounded-2xl shadow p-8 border text-center"><BarChart3 className="w-10 h-10 mx-auto text-slate-300 mb-2" /><p className="text-slate-400 font-medium">No marks recorded yet</p></div>}
+              {exams.map((ex) => {
+                const pct = ex.max ? Math.round(ex.total / ex.max * 100) : 0;
+                return (
+                  <div key={ex.exam} data-testid={`parent-marks-exam-${ex.exam}`} className="bg-white rounded-2xl shadow p-4 sm:p-6 border border-slate-100">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <h2 className="text-lg font-bold text-slate-800">{ex.exam}</h2>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${pct >= 75 ? 'bg-emerald-100 text-emerald-700' : pct >= 33 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>Overall {pct}% &mdash; {ex.total}/{ex.max}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {ex.items.map((m) => {
+                        const sp = m.maxMarks ? Math.round(m.marks / m.maxMarks * 100) : 0;
+                        return (
+                          <div key={m.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                            <p className="font-bold text-slate-900">{m.subject}</p>
+                            <div className="flex items-center gap-3">
+                              <p className="font-bold text-slate-700">{m.marks}<span className="text-slate-400">/{m.maxMarks}</span></p>
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${sp >= 75 ? 'bg-emerald-500 text-white' : sp >= 33 ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'}`}>{sp}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* ========= EVENTS ========= */}
         {activeTab === 'events' && (
