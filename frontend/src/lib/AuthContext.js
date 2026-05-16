@@ -40,6 +40,20 @@ export const getNavItems = (role) => {
 // Fees section (fee types, payment revert, etc.) → super_admin only
 export const canEdit = (role) => role === 'super_admin' || role === 'admin_role';
 export const canEditFees = (role) => role === 'super_admin';
+// Fee revert is allowed for admin & super_admin (not super_admin only)
+export const canRevertFees = (role) => role === 'super_admin' || role === 'admin_role';
+// Concession approval/rejection — super_admin only
+export const canApproveConcession = (role) => role === 'super_admin';
+// Export buttons (CSV/Excel) — admin & super_admin only
+export const canExport = (role) => role === 'super_admin' || role === 'admin_role';
+// Mobile masking — full mobile visible only for admin/super_admin; teachers & office staff see masked
+export const canSeeFullMobile = (role) => role === 'super_admin' || role === 'admin_role';
+export const maskMobile = (mobile) => {
+  if (!mobile) return '';
+  const s = String(mobile);
+  if (s.length <= 4) return s;
+  return s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2);
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);

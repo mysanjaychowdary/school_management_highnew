@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Upload, Download, Search, Edit, Trash2, TrendingUp, Filter, Eye, ArrowRight } from 'lucide-react';
-import { useAuth, canEdit } from '../lib/AuthContext';
+import { useAuth, canEdit, canSeeFullMobile, maskMobile } from '../lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 const Students = () => {
   const { role } = useAuth();
   const showEdit = canEdit(role);
+  const showFullMobile = canSeeFullMobile(role);
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -429,7 +430,7 @@ const Students = () => {
                     <TableCell className="font-medium text-slate-700">{student.studentName}</TableCell>
                     <TableCell><span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{student.studentClass}</span></TableCell>
                     <TableCell><span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">{student.section}</span></TableCell>
-                    <TableCell className="text-slate-600">{student.mobile}</TableCell>
+                    <TableCell className="text-slate-600">{showFullMobile ? student.mobile : maskMobile(student.mobile)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <button onClick={() => navigate(`/students/${student.id}`)} data-testid={`view-student-${student.rollNo}`} className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"><Eye className="w-4 h-4 text-indigo-600" /></button>

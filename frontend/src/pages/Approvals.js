@@ -32,8 +32,8 @@ const Approvals = () => {
 
   useEffect(() => {
     loadLeaveRequests();
-    if (!isTeacher) loadConcessions();
-  }, [loadLeaveRequests, loadConcessions, isTeacher]);
+    if (showConcessions) loadConcessions();
+  }, [loadLeaveRequests, loadConcessions, showConcessions]);
 
   const handleApproveLeave = async (id) => {
     try {
@@ -79,7 +79,7 @@ const Approvals = () => {
         <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: 'Nunito' }}>Approvals</h1>
           <p className="text-base font-medium text-slate-600 mt-1" style={{ fontFamily: 'Figtree' }}>
-            {isTeacher ? 'Review and approve leave requests' : 'Review and approve leave requests and fee concessions'}
+            {showConcessions ? 'Review and approve leave requests and fee concessions' : 'Review and approve leave requests'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ const Approvals = () => {
             <Calendar className="w-4 h-4 mr-2" />Leave Requests
             <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">{leaveRequests.filter(l => l.status === 'pending').length}</span>
           </TabsTrigger>
-          {!isTeacher && (
+          {showConcessions && (
             <TabsTrigger data-testid="concessions-tab" value="concessions" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-6 py-2 font-bold">
               <DollarSign className="w-4 h-4 mr-2" />Concessions
               <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">{concessions.filter(c => c.status === 'pending').length}</span>
@@ -154,8 +154,8 @@ const Approvals = () => {
           )}
         </TabsContent>
 
-        {/* Concessions Tab - hidden for teachers */}
-        {!isTeacher && (
+        {/* Concessions Tab - hidden for teachers and admins (only super_admin) */}
+        {showConcessions && (
           <TabsContent value="concessions" className="space-y-4">
             {concessions.length === 0 ? (
               <div className="bg-white rounded-2xl shadow border border-slate-100 flex flex-col items-center justify-center h-48">

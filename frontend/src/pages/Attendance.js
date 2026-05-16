@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserCheck, Calendar, Download, Send, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth, canExport } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -9,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 const Attendance = () => {
+  const { role } = useAuth();
+  const showExport = canExport(role);
   const [activeTab, setActiveTab] = useState('take');
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
@@ -271,10 +274,10 @@ const Attendance = () => {
             <p className="text-xs text-slate-500 mt-2">Tip: Leave dates blank to view all attendance for the selected class & section.</p>
             <div className="flex flex-col sm:flex-row justify-between mt-4 gap-3">
               <Button data-testid="view-attendance-btn" onClick={handleViewAttendance} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl active:scale-95 transition-transform">View Attendance</Button>
-              <div className="flex gap-2">
+              {showExport && <div className="flex gap-2">
                 <Button data-testid="export-csv-btn" onClick={() => handleExport('csv')} variant="outline" className="font-bold rounded-xl"><Download className="w-4 h-4 mr-2" />CSV</Button>
                 <Button data-testid="export-excel-btn" onClick={() => handleExport('xlsx')} variant="outline" className="font-bold rounded-xl"><Download className="w-4 h-4 mr-2" />Excel</Button>
-              </div>
+              </div>}
             </div>
           </div>
 

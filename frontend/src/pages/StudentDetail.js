@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, ClipboardCheck, DollarSign, Package, TrendingUp } from 'lucide-react';
+import { useAuth, canSeeFullMobile, maskMobile } from '../lib/AuthContext';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 
 const StudentDetail = () => {
+  const { role } = useAuth();
+  const showFullMobile = canSeeFullMobile(role);
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -52,7 +55,7 @@ const StudentDetail = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Father</p><p className="font-bold text-slate-900">{student.fatherName}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mother</p><p className="font-bold text-slate-900">{student.motherName}</p></div>
-          <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mobile</p><p className="font-bold text-slate-900">{student.mobile}</p></div>
+          <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mobile</p><p className="font-bold text-slate-900">{showFullMobile ? student.mobile : maskMobile(student.mobile)}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Address</p><p className="font-bold text-slate-900">{student.address}</p></div>
         </div>
       </div>

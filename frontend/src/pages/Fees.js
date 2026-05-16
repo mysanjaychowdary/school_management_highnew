@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, DollarSign, Download, Receipt, Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { api } from '../lib/api';
-import { useAuth, canEditFees } from '../lib/AuthContext';
+import { useAuth, canEditFees, canRevertFees, canExport } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -14,9 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 const Fees = () => {
   const { user, role } = useAuth();
   const showEdit = canEditFees(role);
+  const showRevert = canRevertFees(role);
+  const showExport = canExport(role);
   const [activeTab, setActiveTab] = useState('payment');
   const [classes, setClasses] = useState([]);
   const [studentCode, setStudentCode] = useState('');
+  const [searchMode, setSearchMode] = useState('id'); // 'id' or 'name'
+  const [nameQuery, setNameQuery] = useState('');
+  const [nameResults, setNameResults] = useState([]);
+  const [searchingName, setSearchingName] = useState(false);
   const [studentData, setStudentData] = useState(null);
   const [selectedFee, setSelectedFee] = useState(null);
   const [customPayAmount, setCustomPayAmount] = useState('');
@@ -65,6 +71,28 @@ const Fees = () => {
       setStudentData(response.data);
       setSelectedFee(null);
     } catch (error) { toast.error('Student not found'); setStudentData(null); }
+  };
+
+  const handleSearchByName = async () => {
+    if (!nameQuery || nameQuery.length < 2) { toast.error('Enter at least 2 characters'); return; }
+    try {
+      setSearchingName(true);
+      const r = await api.getStudents({ search: nameQuery, limit: 20 });
+      const list = Array.isArray(r.data) ? r.data : (r.data?.students || []);
+      setNameResults(list);
+      if (list.length === 0) toast.info('No students found');
+    } catch (e) { toast.error('Search failed'); }
+    finally { setSearchingName(false); }
+  };
+
+  const selectStudentFromResults = async (s) => {
+    setStudentCode(s.studentCode || s.rollNo);
+    setNameResults([]);
+    try {
+      const response = await api.getStudentFees(s.studentCode || s.rollNo);
+      setStudentData(response.data);
+      setSelectedFee(null);
+    } catch (error) { toast.error('Failed to load student fees'); }
   };
 
   const handleUpiUpload = async (e) => {
@@ -179,11 +207,39 @@ const Fees = () => {
         {/* Collect Payment */}
         <TabsContent value="payment" className="space-y-6">
           <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Search Student</h2>
-            <div className="flex gap-4">
-              <div className="flex-1"><Label>Student ID *</Label><Input data-testid="fee-studentcode-input" value={studentCode} onChange={(e) => setStudentCode(e.target.value)} className="rounded-xl h-12" placeholder="Enter Student ID (e.g., ADM001)" /></div>
-              <div className="flex items-end"><Button data-testid="search-student-btn" onClick={handleSearchStudent} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12 active:scale-95 transition-transform"><Search className="w-5 h-5 mr-2" />Search</Button></div>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <h2 className="text-xl font-bold text-slate-800">Search Student</h2>
+              <div className="inline-flex bg-slate-100 rounded-xl p-1">
+                <button data-testid="search-by-id-btn" onClick={() => setSearchMode('id')} className={`px-4 py-1.5 rounded-lg font-bold text-sm transition-colors ${searchMode === 'id' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>By ID</button>
+                <button data-testid="search-by-name-btn" onClick={() => setSearchMode('name')} className={`px-4 py-1.5 rounded-lg font-bold text-sm transition-colors ${searchMode === 'name' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>By Name</button>
+              </div>
             </div>
+            {searchMode === 'id' ? (
+              <div className="flex gap-4">
+                <div className="flex-1"><Label>Student ID *</Label><Input data-testid="fee-studentcode-input" value={studentCode} onChange={(e) => setStudentCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleSearchStudent(); }} className="rounded-xl h-12" placeholder="Enter Student ID (e.g., ADM001)" /></div>
+                <div className="flex items-end"><Button data-testid="search-student-btn" onClick={handleSearchStudent} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12 active:scale-95 transition-transform"><Search className="w-5 h-5 mr-2" />Search</Button></div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex gap-4">
+                  <div className="flex-1"><Label>Search by Name or Roll *</Label><Input data-testid="fee-name-search-input" value={nameQuery} onChange={(e) => setNameQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleSearchByName(); }} className="rounded-xl h-12" placeholder="Type student name or roll no" /></div>
+                  <div className="flex items-end"><Button data-testid="search-by-name-go-btn" onClick={handleSearchByName} disabled={searchingName} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12 active:scale-95 transition-transform"><Search className="w-5 h-5 mr-2" />{searchingName ? 'Searching...' : 'Search'}</Button></div>
+                </div>
+                {nameResults.length > 0 && (
+                  <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                    {nameResults.map((s) => (
+                      <button key={s.id} data-testid={`fee-name-result-${s.id}`} onClick={() => selectStudentFromResults(s)} className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-sky-50 transition-colors">
+                        <div>
+                          <p className="font-bold text-slate-900">{s.studentName}</p>
+                          <p className="text-xs text-slate-500">Roll: {s.rollNo} | Class {s.studentClass}-{s.section} | ID: {s.studentCode || s.rollNo}</p>
+                        </div>
+                        <span className="text-sky-600 font-bold text-xs">Select &rarr;</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {studentData && (
@@ -477,15 +533,15 @@ const Fees = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
+              {showExport && <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
                 <h2 className="text-xl font-bold text-slate-800 mb-4">Export Fees</h2>
                 <div className="flex gap-4 items-end">
                   <div className="flex-1"><Label>Start Date *</Label><Input type="date" value={exportFilters.startDate} onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })} className="rounded-xl h-12" /></div>
                   <div className="flex-1"><Label>End Date *</Label><Input type="date" value={exportFilters.endDate} onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })} className="rounded-xl h-12" /></div>
-                  <Button onClick={() => handleExportFees('csv')} variant="outline" className="font-bold rounded-xl h-12"><Download className="w-4 h-4 mr-2" />CSV</Button>
-                  <Button onClick={() => handleExportFees('xlsx')} variant="outline" className="font-bold rounded-xl h-12"><Download className="w-4 h-4 mr-2" />Excel</Button>
+                  <Button data-testid="fees-export-csv" onClick={() => handleExportFees('csv')} variant="outline" className="font-bold rounded-xl h-12"><Download className="w-4 h-4 mr-2" />CSV</Button>
+                  <Button data-testid="fees-export-xlsx" onClick={() => handleExportFees('xlsx')} variant="outline" className="font-bold rounded-xl h-12"><Download className="w-4 h-4 mr-2" />Excel</Button>
                 </div>
-              </div>
+              </div>}
             </>
           )}
         </TabsContent>
@@ -513,7 +569,7 @@ const Fees = () => {
                   try { const r = await api.getFeeStatus({ studentClass: feeStatusClass, section: feeStatusSection }); setFeeStatusData(r.data); }
                   catch (e) { toast.error('Failed to load'); }
                 }} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12 active:scale-95 transition-transform">Load</Button>
-                <Button variant="outline" className="font-bold rounded-xl h-12" onClick={async () => {
+                {showExport && <Button data-testid="fee-status-export" variant="outline" className="font-bold rounded-xl h-12" onClick={async () => {
                   if (!feeStatusClass || !feeStatusSection) { toast.error('Select class & section'); return; }
                   try {
                     const r = await api.exportFeeStatus({ studentClass: feeStatusClass, section: feeStatusSection, format: 'xlsx' });
@@ -521,7 +577,7 @@ const Fees = () => {
                     const link = document.createElement('a'); link.href = url; link.setAttribute('download', `fee_status_${feeStatusClass}_${feeStatusSection}.xlsx`);
                     document.body.appendChild(link); link.click(); link.remove();
                   } catch (e) { toast.error('Export failed'); }
-                }}><Download className="w-4 h-4 mr-2" />Export</Button>
+                }}><Download className="w-4 h-4 mr-2" />Export</Button>}
               </div>
             </div>
           </div>
