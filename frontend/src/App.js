@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth, canAccess, getDefaultRoute } from './lib/AuthContext';
+import { AuthProvider, useAuth, canAccess } from './lib/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Classes from './pages/Classes';
 import Students from './pages/Students';
@@ -14,6 +14,7 @@ import HomeworkPage from './pages/HomeworkPage';
 import StaffPage from './pages/StaffPage';
 import Approvals from './pages/Approvals';
 import Marks from './pages/Marks';
+import Roles from './pages/Roles';
 import Settings from './pages/Settings';
 import ParentPortal from './pages/ParentPortal';
 import LoginPage from './pages/LoginPage';
@@ -21,16 +22,29 @@ import Layout from './components/Layout';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
+const getDefaultRoute = (perms) => {
+  const mods = perms?.modules || [];
+  if (mods.includes('dashboard')) return '/';
+  // Else pick first available module
+  const order = ['classes', 'students', 'attendance', 'fees', 'inventory', 'expenses', 'calendar', 'homework', 'marks', 'staff', 'approvals', 'roles', 'settings'];
+  for (const m of order) {
+    if (mods.includes(m)) {
+      return m === 'dashboard' ? '/' : `/${m}`;
+    }
+  }
+  return '/students';
+};
+
 const ProtectedRoute = ({ path, children }) => {
-  const { role } = useAuth();
-  if (!canAccess(role, path)) return <Navigate to={getDefaultRoute(role)} replace />;
+  const { perms } = useAuth();
+  if (!canAccess(perms, path)) return <Navigate to={getDefaultRoute(perms)} replace />;
   return children;
 };
 
 const AppRoutes = () => {
-  const { user, role, loading } = useAuth();
+  const { user, perms, loaded } = useAuth();
 
-  if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div></div>;
+  if (!loaded) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div></div>;
 
   if (!user) return (
     <Routes>
@@ -56,8 +70,9 @@ const AppRoutes = () => {
         <Route path="staff" element={<ProtectedRoute path="/staff"><StaffPage /></ProtectedRoute>} />
         <Route path="approvals" element={<ProtectedRoute path="/approvals"><Approvals /></ProtectedRoute>} />
         <Route path="marks" element={<ProtectedRoute path="/marks"><Marks /></ProtectedRoute>} />
+        <Route path="roles" element={<ProtectedRoute path="/roles"><Roles /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute path="/settings"><Settings /></ProtectedRoute>} />
-        <Route path="*" element={<Navigate to={getDefaultRoute(role)} replace />} />
+        <Route path="*" element={<Navigate to={getDefaultRoute(perms)} replace />} />
       </Route>
     </Routes>
   );

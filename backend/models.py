@@ -385,3 +385,45 @@ class MarksBulkCreate(BaseModel):
     recordedBy: Optional[str] = ""
     rows: List[MarkRow]
 
+
+class Role(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    roleName: str
+    label: str = ""
+    modules: List[str] = []
+    canEdit: bool = False
+    canDelete: bool = False
+    canExport: bool = False
+    canEditFees: bool = False
+    canRevertFees: bool = False
+    canApproveConcession: bool = False
+    canSeeFullMobile: bool = False
+    isSystem: bool = False
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RoleCreate(BaseModel):
+    roleName: str
+    label: Optional[str] = ""
+    modules: List[str] = []
+    canEdit: bool = False
+    canDelete: bool = False
+    canExport: bool = False
+    canEditFees: bool = False
+    canRevertFees: bool = False
+    canApproveConcession: bool = False
+    canSeeFullMobile: bool = False
+
+
+class RoleUpdate(BaseModel):
+    label: Optional[str] = None
+    modules: Optional[List[str]] = None
+    canEdit: Optional[bool] = None
+    canDelete: Optional[bool] = None
+    canExport: Optional[bool] = None
+    canEditFees: Optional[bool] = None
+    canRevertFees: Optional[bool] = None
+    canApproveConcession: Optional[bool] = None
+    canSeeFullMobile: Optional[bool] = None
+

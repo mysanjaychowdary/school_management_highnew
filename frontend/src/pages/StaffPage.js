@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const StaffPage = () => {
-  const { role } = useAuth();
-  const showEdit = canEdit(role);
+  const { role, perms } = useAuth();
+  const showEdit = canEdit(perms);
   const [staff, setStaff] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
@@ -23,7 +24,12 @@ const StaffPage = () => {
     try { const r = await api.getStaff(); setStaff(r.data); } catch (e) { toast.error('Failed to load staff'); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { loadStaff(); }, [loadStaff]);
+  const loadRoles = useCallback(async () => {
+    try { const r = await api.getRoles(); setRoles(r.data.filter((x) => x.roleName !== 'super_admin')); } catch (e) { /* ignore */ }
+  }, []);
+  useEffect(() => { loadStaff(); loadRoles(); }, [loadStaff, loadRoles]);
+
+  const roleLabel = (rn) => roles.find((r) => r.roleName === rn)?.label || rn;
 
   const resetForm = () => { setForm({ name: '', role: 'teacher', mobile: '', subject: '', joiningDate: '', username: '', password: '' }); setEditingStaff(null); };
 
@@ -72,7 +78,7 @@ const StaffPage = () => {
               <div><Label>Role *</Label>
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                   <SelectTrigger className="rounded-xl h-12"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="teacher">Teacher</SelectItem><SelectItem value="office_staff">Office Staff</SelectItem><SelectItem value="admin_role">Admin</SelectItem></SelectContent>
+                  <SelectContent>{roles.map((r) => <SelectItem key={r.roleName} value={r.roleName}>{r.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Mobile *</Label><Input required value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} className="rounded-xl h-12" /></div>
@@ -106,7 +112,7 @@ const StaffPage = () => {
                 {staff.map((s) => (
                   <TableRow key={s.id} className="hover:bg-slate-50/80">
                     <TableCell className="font-semibold text-slate-900">{s.name}</TableCell>
-                    <TableCell><span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${s.role === 'teacher' ? 'bg-sky-100 text-sky-700' : s.role === 'admin_role' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>{s.role === 'teacher' ? 'Teacher' : s.role === 'admin_role' ? 'Admin' : 'Office Staff'}</span></TableCell>
+                    <TableCell><span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${s.role === 'teacher' ? 'bg-sky-100 text-sky-700' : s.role === 'admin_role' ? 'bg-purple-100 text-purple-700' : s.role === 'office_staff' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(s.role)}</span></TableCell>
                     <TableCell className="text-slate-600">{s.mobile}</TableCell>
                     <TableCell className="text-slate-600">{s.subject || '-'}</TableCell>
                     <TableCell className="font-medium text-slate-700">{s.username}</TableCell>

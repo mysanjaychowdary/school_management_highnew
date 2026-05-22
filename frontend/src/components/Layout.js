@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3 } from 'lucide-react';
+import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 
 const allNavItems = [
@@ -16,25 +16,27 @@ const allNavItems = [
   { path: '/marks', label: 'Marks', icon: BarChart3 },
   { path: '/staff', label: 'Staff', icon: UserCog },
   { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { path: '/roles', label: 'Roles', icon: KeyRound },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, logout } = useAuth();
+  const { user, role, perms, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const navItems = allNavItems.filter((item) => canAccess(role, item.path));
+  const navItems = allNavItems.filter((item) => canAccess(perms, item.path));
 
   const handleLogout = () => { logout(); navigate('/'); };
 
   const getRoleLabel = () => {
+    if (perms?.label) return perms.label;
     if (role === 'super_admin') return 'Super Admin';
     if (role === 'admin_role') return 'Admin';
     if (role === 'teacher') return 'Teacher';
     if (role === 'office_staff') return 'Office Staff';
-    return '';
+    return role || '';
   };
 
   const NavContent = () => (

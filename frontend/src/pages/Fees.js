@@ -12,10 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 
 const Fees = () => {
-  const { user, role } = useAuth();
-  const showEdit = canEditFees(role);
-  const showRevert = canRevertFees(role);
-  const showExport = canExport(role);
+  const { user, role, perms } = useAuth();
+  const showEdit = canEditFees(perms);
+  const showRevert = canRevertFees(perms);
+  const showExport = canExport(perms);
   const [activeTab, setActiveTab] = useState('payment');
   const [classes, setClasses] = useState([]);
   const [studentCode, setStudentCode] = useState('');

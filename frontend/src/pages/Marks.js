@@ -15,8 +15,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#f97316', '#ef4444'];
 
 const Marks = () => {
-  const { user, role } = useAuth();
-  const showAnalytics = canEdit(role); // admin & super_admin only
+  const { user, role, perms } = useAuth();
+  const showAnalytics = canEdit(perms); // admin & super_admin only
   const [activeTab, setActiveTab] = useState('upload');
   const [classes, setClasses] = useState([]);
 

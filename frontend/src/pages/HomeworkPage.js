@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 const HomeworkPage = () => {
-  const { user, role } = useAuth();
-  const showEdit = canEdit(role);
+  const { user, role, perms } = useAuth();
+  const showEdit = canEdit(perms);
   const defaultAssignedBy = user?.name || user?.username || '';
   const [homework, setHomework] = useState([]);
   const [classes, setClasses] = useState([]);

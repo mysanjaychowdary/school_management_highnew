@@ -142,6 +142,12 @@ export const api = {
   updateSubject: (id, data) => axios.put(`${API}/subjects/${id}`, data),
   deleteSubject: (id) => axios.delete(`${API}/subjects/${id}`),
 
+  // Roles
+  getRoles: () => axios.get(`${API}/roles`),
+  createRole: (data) => axios.post(`${API}/roles`, data),
+  updateRole: (id, data) => axios.put(`${API}/roles/${id}`, data),
+  deleteRole: (id) => axios.delete(`${API}/roles/${id}`),
+
   // Invoice
   getInvoiceUrl: (paymentId) => `${API}/fees/invoice/${paymentId}`,
 };

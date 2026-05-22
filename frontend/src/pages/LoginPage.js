@@ -21,7 +21,7 @@ const LoginPage = () => {
     try {
       setLoading(true);
       const response = await api.login({ username, password });
-      login(response.data.user, response.data.role);
+      login(response.data.user, response.data.role, response.data.roleDetails);
       toast.success(`Welcome, ${response.data.user.name || response.data.user.username}!`);
     } catch (error) {
       toast.error('Invalid username or password');

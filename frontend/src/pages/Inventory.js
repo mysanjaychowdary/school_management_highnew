@@ -12,8 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const Inventory = () => {
-  const { role } = useAuth();
-  const showEdit = canEdit(role);
+  const { role, perms } = useAuth();
+  const showEdit = canEdit(perms);
   const [items, setItems] = useState([]);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);

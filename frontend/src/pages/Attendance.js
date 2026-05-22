@@ -10,8 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 const Attendance = () => {
-  const { role } = useAuth();
-  const showExport = canExport(role);
+  const { role, perms } = useAuth();
+  const showExport = canExport(perms);
   const [activeTab, setActiveTab] = useState('take');
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);

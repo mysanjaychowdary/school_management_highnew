@@ -1,92 +1,119 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
-
-// Role access map
-// super_admin: everything
-// admin_role: everything except settings
-// teacher: students, attendance, calendar, homework
-// office_staff: students, fees, expenses, inventory
-const ROLE_ACCESS = {
-  super_admin: ['/', '/classes', '/students', '/attendance', '/fees', '/expenses', '/inventory', '/calendar', '/homework', '/marks', '/staff', '/approvals', '/settings'],
-  admin_role: ['/', '/classes', '/students', '/attendance', '/fees', '/expenses', '/inventory', '/calendar', '/homework', '/marks', '/staff', '/approvals'],
-  teacher: ['/students', '/attendance', '/calendar', '/homework', '/marks', '/approvals'],
-  office_staff: ['/students', '/fees', '/expenses', '/inventory'],
+// Default permission fallback when no role details
+const DEFAULT_PERMS = {
+  modules: [],
+  canEdit: false, canDelete: false, canExport: false,
+  canEditFees: false, canRevertFees: false, canApproveConcession: false, canSeeFullMobile: false,
 };
 
-export const getDefaultRoute = (role) => {
-  if (role === 'super_admin' || role === 'admin_role') return '/';
-  if (role === 'teacher') return '/students';
-  if (role === 'office_staff') return '/students';
-  return '/';
+// Module key -> route path
+const MODULE_PATHS = {
+  dashboard: '/', classes: '/classes', students: '/students', attendance: '/attendance',
+  fees: '/fees', expenses: '/expenses', inventory: '/inventory', calendar: '/calendar',
+  homework: '/homework', marks: '/marks', staff: '/staff', approvals: '/approvals',
+  roles: '/roles', settings: '/settings',
 };
+const PATH_TO_MODULE = Object.fromEntries(Object.entries(MODULE_PATHS).map(([m, p]) => [p, m]));
 
-export const canAccess = (role, path) => {
-  if (!role) return false;
-  const allowed = ROLE_ACCESS[role] || [];
-  // Allow student detail for anyone who can access students
-  if (path.startsWith('/students/') && allowed.includes('/students')) return true;
-  return allowed.includes(path);
-};
-
-export const getNavItems = (role) => {
-  return ROLE_ACCESS[role] || [];
-};
-
-// Edit/Delete permissions
-// Non-fees sections (students, classes, inventory, calendar, homework, staff, etc.) → admin & super_admin only
-// Fees section (fee types, payment revert, etc.) → super_admin only
-export const canEdit = (role) => role === 'super_admin' || role === 'admin_role';
-export const canEditFees = (role) => role === 'super_admin';
-// Fee revert is allowed for admin & super_admin (not super_admin only)
-export const canRevertFees = (role) => role === 'super_admin' || role === 'admin_role';
-// Concession approval/rejection — super_admin only
-export const canApproveConcession = (role) => role === 'super_admin';
-// Export buttons (CSV/Excel) — admin & super_admin only
-export const canExport = (role) => role === 'super_admin' || role === 'admin_role';
-// Mobile masking — full mobile visible only for admin/super_admin; teachers & office staff see masked
-export const canSeeFullMobile = (role) => role === 'super_admin' || role === 'admin_role';
-export const maskMobile = (mobile) => {
-  if (!mobile) return '';
-  const s = String(mobile);
-  if (s.length <= 4) return s;
-  return s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2);
-};
+export const AVAILABLE_MODULES = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'classes', label: 'Classes' },
+  { key: 'students', label: 'Students' },
+  { key: 'attendance', label: 'Attendance' },
+  { key: 'fees', label: 'Fees' },
+  { key: 'expenses', label: 'Expenses' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'calendar', label: 'Calendar' },
+  { key: 'homework', label: 'Homework' },
+  { key: 'marks', label: 'Marks' },
+  { key: 'staff', label: 'Staff' },
+  { key: 'approvals', label: 'Approvals' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'settings', label: 'Settings' },
+];
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [perms, setPerms] = useState(DEFAULT_PERMS);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('schoolpro_auth');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        setUser(parsed.user);
-        setRole(parsed.role);
-      } catch (e) { localStorage.removeItem('schoolpro_auth'); }
+        const d = JSON.parse(stored);
+        setUser(d.user);
+        setRole(d.role);
+        setPerms(d.perms || DEFAULT_PERMS);
+      } catch (e) { /* ignore */ }
     }
-    setLoading(false);
+    setLoaded(true);
   }, []);
 
-  const login = (userData, userRole) => {
-    setUser(userData);
-    setRole(userRole);
-    localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: userRole }));
+  const login = (userData, roleName, roleDetails) => {
+    const p = roleDetails ? { ...DEFAULT_PERMS, ...roleDetails } : DEFAULT_PERMS;
+    setUser(userData); setRole(roleName); setPerms(p);
+    localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: roleName, perms: p }));
   };
 
   const logout = () => {
-    setUser(null);
-    setRole(null);
+    setUser(null); setRole(null); setPerms(DEFAULT_PERMS);
     localStorage.removeItem('schoolpro_auth');
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, role, perms, login, logout, loaded }}>
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => useContext(AuthContext);
+
+// ----- Access helpers -----
+
+// Permission helpers (read from auth perms loaded at login)
+export const canAccess = (perms, path) => {
+  if (!perms) return false;
+  const mod = PATH_TO_MODULE[path];
+  if (!mod) return false;
+  return (perms.modules || []).includes(mod);
+};
+
+export const getNavItems = (perms) => (perms?.modules || []);
+
+// Role-based capability checks — now driven by perms object (NOT hardcoded role strings)
+export const canEdit = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canEdit : false;
+};
+export const canEditFees = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canEditFees : false;
+};
+export const canRevertFees = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canRevertFees : false;
+};
+export const canExport = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canExport : false;
+};
+export const canApproveConcession = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canApproveConcession : false;
+};
+export const canSeeFullMobile = (roleOrPerms) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  return p ? !!p.canSeeFullMobile : false;
+};
+export const maskMobile = (mobile) => {
+  if (!mobile) return '';
+  const s = String(mobile);
+  if (s.length <= 4) return s;
+  return s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2);
 };

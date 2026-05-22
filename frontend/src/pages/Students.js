@@ -12,9 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const Students = () => {
-  const { role } = useAuth();
-  const showEdit = canEdit(role);
-  const showFullMobile = canSeeFullMobile(role);
+  const { role, perms } = useAuth();
+  const showEdit = canEdit(perms);
+  const showFullMobile = canSeeFullMobile(perms);
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);

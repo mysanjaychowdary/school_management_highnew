@@ -7,8 +7,8 @@ import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 
 const StudentDetail = () => {
-  const { role } = useAuth();
-  const showFullMobile = canSeeFullMobile(role);
+  const { role, perms } = useAuth();
+  const showFullMobile = canSeeFullMobile(perms);
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);

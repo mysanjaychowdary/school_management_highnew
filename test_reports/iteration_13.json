@@ -1,0 +1,40 @@
+{
+  "summary": "Tested custom roles + module-based permissions feature end-to-end. Backend: 13/13 new role tests pass + 72/72 full regression pytest pass. Frontend: super_admin Roles page CRUD flow works (create→edit→delete). System role gating works (super_admin edit disabled, all system delete disabled). Teacher login correctly hides Roles/Fees/Settings nav items, retains Students/Attendance, and persists perms in localStorage across refresh. ONE FRONTEND BUG FOUND: page-level header action buttons on Students page (Add Student, Bulk Upload, Sample CSV, Promote) are NOT gated by perms.canEdit / perms.canExport — teacher (canEdit=false, canExport=false) still sees them all in the page header.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "pages/Students.js", "issue": "Header buttons 'Add Student' (line 266), 'Bulk Upload' (line 280-283), 'Sample CSV' (line 285), and 'Promote' (line 295) are rendered unconditionally. They should be wrapped in `{showEdit && ...}` (Add/Bulk/Promote) and `{canExport(perms) && ...}` (Sample CSV). Confirmed by screenshot at /students after teach1 login — teacher (canEdit=false, canExport=false) sees all 4 buttons. Note: inline row-level edit/delete/promote are correctly gated by `showEdit && ...` on line 437; only the header is missing the guard.", "selector": "[data-testid=\"add-student-btn\"], [data-testid=\"bulk-upload-input\"], [data-testid=\"download-sample-csv\"], [data-testid=\"promote-students-btn\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_roles.py",
+    "/app/test_reports/pytest/iteration_13_pytest.xml"
+  ],
+  "action_items": [
+    "Fix Students.js header: wrap Add Student / Bulk Upload / Promote buttons in `{showEdit && ...}`, and Sample CSV in `{canExport(perms) && ...}`. Audit ALL other page headers (Inventory, Staff, Classes, Calendar, Homework, Fees, Expenses, Approvals) the same way — the review-request explicitly states 'per-page edit/delete/export buttons must dynamically reflect the role's permissions', and the same pattern of unguarded header buttons may exist in other pages.",
+    "Update /app/memory/test_credentials.md: teach1 password is `12345678`, not `pass123` as documented. The test_credentials file was stale and caused initial 401 in test runs."
+  ],
+  "critical_code_review_comments": [
+    "Backend roles router is clean: ensure_system_roles() is idempotent, super_admin update guard works, isSystem delete guard works, staff-FK delete guard works (counts staff with role and 400s with the count).",
+    "AuthContext perms model is solid: DEFAULT_PERMS empty-modules array correctly forces canAccess=false for unknown roles; localStorage stores perms object so refresh works without re-login.",
+    "Roles.js page UI: super_admin edit disabled, all system roles delete disabled — both via `disabled` attribute on buttons (verified with is_disabled() in playwright). Good.",
+    "BUG (medium): /api/roles is a public endpoint with no auth check. Any unauthenticated client can list/create/update/delete roles. Acceptable for current scope (no auth tokens in this app), but flagging — the entire app has no per-request auth, so this is consistent but worth noting.",
+    "Students.js page-level guard bug (see frontend_issues) is the only functional miss in this feature."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_roles.py (NEW: 13 tests covering system role seeding, custom role CRUD, login roleDetails for super_admin/teacher/custom-role)"
+  ],
+  "success_rate": {"backend": "100% (72/72 pytest, 13/13 new role tests)", "frontend": "85% (Roles page CRUD + nav filtering + auth persistence verified; per-page header button gating BROKEN on Students page, likely on other pages too)"},
+  "test_credentials": {
+    "super_admin": "admin / 12345678 (verified)",
+    "teacher": "teach1 / 12345678 (verified — NOTE: test_credentials.md says pass123 which is WRONG)",
+    "parent": "ali / 123456 (not exercised this iteration)"
+  },
+  "seed_data_creation": "Tests create+cleanup `test_librarian` and `test_accountant` custom roles plus TEST_LibStaff/TEST_Acct staff records within fixtures. UI test creates+deletes `ui_test_role`. No persistent data left behind.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Roles backend solid. The pattern of header action buttons missing perms guards on page-level (Students.js confirmed) likely repeats across other pages — when retesting, log in as teach1/12345678 and walk every page in nav (Students, Attendance, Calendar, Homework, Marks, Approvals) to confirm header CTAs (Add/Edit/Bulk/Export/Promote) hidden as expected. Then login as office staff (`office`/<password unknown — check db.staff>) to verify office_staff perms (canEdit=false, canExport=false) similarly hide CTAs on Fees/Expenses/Inventory/Students. Run `pytest /app/backend/tests/` for backend regression. New file: /app/backend/tests/test_roles.py.",
+  "rca_of_the_issue": "Students.js was updated to use `const showEdit = canEdit(perms)` (line 16) and the table-row-level edit/promote buttons (line 437) are correctly wrapped in `{showEdit && ...}`. However, the page header action zone (lines 263-296) still renders Add/Bulk/Sample/Promote buttons unconditionally. Likely the developer missed updating the header section when migrating from hardcoded role checks to perms-based checks. Reproduction: login as teach1/12345678 -> nav to /students -> all 4 header buttons still render despite perms.canEdit=false, perms.canExport=false. Mitigation: wrap Add Student & Bulk Upload & Promote dialogs in `{showEdit && (...)}` and Sample CSV button in `{canExport(perms) && (...)}`. Audit Inventory.js, Staff.js, Classes.js, Calendar.js, Homework.js, Fees.js, Expenses.js, Approvals.js for the same anti-pattern."
+}

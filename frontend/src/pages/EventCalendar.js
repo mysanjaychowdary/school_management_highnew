@@ -9,8 +9,8 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 
 const EventCalendar = () => {
-  const { role } = useAuth();
-  const showEdit = canEdit(role);
+  const { role, perms } = useAuth();
+  const showEdit = canEdit(perms);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
