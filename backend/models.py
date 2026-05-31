@@ -427,3 +427,39 @@ class RoleUpdate(BaseModel):
     canApproveConcession: Optional[bool] = None
     canSeeFullMobile: Optional[bool] = None
 
+
+class Complaint(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: str = ""
+    photoUrl: Optional[str] = None
+    dueDate: str
+    status: str = "pending"  # pending | in_progress | resolved
+    priority: str = "medium"  # low | medium | high
+    createdBy: str = ""  # staff name
+    createdByUsername: str = ""
+    createdByRole: str = ""
+    notes: Optional[str] = None
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    lastStatusUpdate: Optional[datetime] = None
+    resolvedAt: Optional[datetime] = None
+
+
+class ComplaintCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    photoUrl: Optional[str] = None
+    dueDate: str
+    priority: Optional[str] = "medium"
+    createdBy: Optional[str] = ""
+    createdByUsername: Optional[str] = ""
+    createdByRole: Optional[str] = ""
+
+
+class ComplaintUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    priority: Optional[str] = None
+    dueDate: Optional[str] = None
+

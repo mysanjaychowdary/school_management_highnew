@@ -15,6 +15,7 @@ import StaffPage from './pages/StaffPage';
 import Approvals from './pages/Approvals';
 import Marks from './pages/Marks';
 import Roles from './pages/Roles';
+import Complaints from './pages/Complaints';
 import Settings from './pages/Settings';
 import ParentPortal from './pages/ParentPortal';
 import LoginPage from './pages/LoginPage';
@@ -71,6 +72,7 @@ const AppRoutes = () => {
         <Route path="approvals" element={<ProtectedRoute path="/approvals"><Approvals /></ProtectedRoute>} />
         <Route path="marks" element={<ProtectedRoute path="/marks"><Marks /></ProtectedRoute>} />
         <Route path="roles" element={<ProtectedRoute path="/roles"><Roles /></ProtectedRoute>} />
+        <Route path="complaints" element={<ProtectedRoute path="/complaints"><Complaints /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute path="/settings"><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultRoute(perms)} replace />} />
       </Route>

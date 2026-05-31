@@ -321,3 +321,56 @@ async def get_dashboard_stats():
     return {"totalStudents": total_students, "presentToday": today_present, "absentToday": today_absent,
             "totalFeesCollected": total_fees, "pendingFees": total_expected - total_fees}
 
+
+# ==================== COMPLAINTS ====================
+
+@router.post("/complaints", response_model=Complaint)
+async def create_complaint(data: ComplaintCreate):
+    obj = Complaint(**data.model_dump())
+    doc = obj.model_dump()
+    doc['createdAt'] = doc['createdAt'].isoformat()
+    if doc.get('lastStatusUpdate'): doc['lastStatusUpdate'] = doc['lastStatusUpdate'].isoformat()
+    if doc.get('resolvedAt'): doc['resolvedAt'] = doc['resolvedAt'].isoformat()
+    await db.complaints.insert_one(doc)
+    return obj
+
+@router.get("/complaints")
+async def list_complaints(status: Optional[str] = None, createdByUsername: Optional[str] = None,
+                          overdueOnly: Optional[bool] = False):
+    query = {}
+    if status: query['status'] = status
+    if createdByUsername: query['createdByUsername'] = createdByUsername
+    rows = await db.complaints.find(query, {"_id": 0}).sort("createdAt", -1).to_list(2000)
+    today = datetime.now().strftime('%Y-%m-%d')
+    for c in rows:
+        c['isOverdue'] = (c.get('status') != 'resolved') and (c.get('dueDate') or '') < today
+    if overdueOnly:
+        rows = [c for c in rows if c['isOverdue']]
+    return rows
+
+@router.get("/complaints/overdue-count")
+async def complaints_overdue_count():
+    today = datetime.now().strftime('%Y-%m-%d')
+    count = await db.complaints.count_documents({"status": {"$ne": "resolved"}, "dueDate": {"$lt": today}})
+    pending = await db.complaints.count_documents({"status": "pending"})
+    in_progress = await db.complaints.count_documents({"status": "in_progress"})
+    return {"overdue": count, "pending": pending, "inProgress": in_progress}
+
+@router.put("/complaints/{complaint_id}")
+async def update_complaint(complaint_id: str, data: ComplaintUpdate):
+    c = await db.complaints.find_one({"id": complaint_id}, {"_id": 0})
+    if not c: raise HTTPException(status_code=404, detail="Complaint not found")
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    if 'status' in update:
+        update['lastStatusUpdate'] = datetime.now(timezone.utc).isoformat()
+        if update['status'] == 'resolved':
+            update['resolvedAt'] = datetime.now(timezone.utc).isoformat()
+    if update:
+        await db.complaints.update_one({"id": complaint_id}, {"$set": update})
+    return await db.complaints.find_one({"id": complaint_id}, {"_id": 0})
+
+@router.delete("/complaints/{complaint_id}")
+async def delete_complaint(complaint_id: str):
+    res = await db.complaints.delete_one({"id": complaint_id})
+    if res.deleted_count == 0: raise HTTPException(status_code=404, detail="Complaint not found")
+    return {"message": "Complaint deleted"}

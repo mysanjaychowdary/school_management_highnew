@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound } from 'lucide-react';
+import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 
 const allNavItems = [
@@ -16,6 +16,7 @@ const allNavItems = [
   { path: '/marks', label: 'Marks', icon: BarChart3 },
   { path: '/staff', label: 'Staff', icon: UserCog },
   { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { path: '/complaints', label: 'Complaints', icon: AlertTriangle },
   { path: '/roles', label: 'Roles', icon: KeyRound },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

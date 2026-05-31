@@ -148,6 +148,13 @@ export const api = {
   updateRole: (id, data) => axios.put(`${API}/roles/${id}`, data),
   deleteRole: (id) => axios.delete(`${API}/roles/${id}`),
 
+  // Complaints
+  getComplaints: (params) => axios.get(`${API}/complaints`, { params }),
+  createComplaint: (data) => axios.post(`${API}/complaints`, data),
+  updateComplaint: (id, data) => axios.put(`${API}/complaints/${id}`, data),
+  deleteComplaint: (id) => axios.delete(`${API}/complaints/${id}`),
+  getComplaintsOverdue: () => axios.get(`${API}/complaints/overdue-count`),
+
   // Invoice
   getInvoiceUrl: (paymentId) => `${API}/fees/invoice/${paymentId}`,
 };

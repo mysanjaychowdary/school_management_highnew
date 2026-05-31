@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 # ==================== SYSTEM ROLES SEEDING ====================
 
 SYSTEM_ROLES = [
-    {"roleName": "super_admin", "label": "Super Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "roles", "settings"],
+    {"roleName": "super_admin", "label": "Super Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "roles", "settings"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": True, "canRevertFees": True, "canApproveConcession": True, "canSeeFullMobile": True, "isSystem": True},
-    {"roleName": "admin_role", "label": "Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals"],
+    {"roleName": "admin_role", "label": "Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": False, "canRevertFees": True, "canApproveConcession": False, "canSeeFullMobile": True, "isSystem": True},
-    {"roleName": "teacher", "label": "Teacher", "modules": ["students", "attendance", "calendar", "homework", "marks", "approvals"],
+    {"roleName": "teacher", "label": "Teacher", "modules": ["students", "attendance", "calendar", "homework", "marks", "approvals", "complaints"],
      "canEdit": False, "canDelete": False, "canExport": False, "canEditFees": False, "canRevertFees": False, "canApproveConcession": False, "canSeeFullMobile": False, "isSystem": True},
-    {"roleName": "office_staff", "label": "Office Staff", "modules": ["students", "fees", "expenses", "inventory"],
+    {"roleName": "office_staff", "label": "Office Staff", "modules": ["students", "fees", "expenses", "inventory", "complaints"],
      "canEdit": False, "canDelete": False, "canExport": False, "canEditFees": False, "canRevertFees": False, "canApproveConcession": False, "canSeeFullMobile": False, "isSystem": True},
 ]
 
@@ -39,6 +39,11 @@ async def ensure_system_roles():
             doc = Role(**sr).model_dump()
             doc['createdAt'] = doc['createdAt'].isoformat()
             await db.roles.insert_one(doc)
+        else:
+            # Patch system roles to ensure 'complaints' module present (idempotent migration)
+            mods = existing.get('modules', [])
+            if 'complaints' not in mods:
+                await db.roles.update_one({"roleName": sr['roleName']}, {"$set": {"modules": sr['modules']}})
 
 async def get_role_by_name(role_name: str):
     """Fetch role permissions. Falls back to a permissive empty role if not found."""
