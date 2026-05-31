@@ -38,7 +38,19 @@
 
 ## CHANGELOG
 
-### 2026-02-28 (this fork) — UPDATED Fee Promotion Rules
+### 2026-02-28 (this session) — Complaints Module + Dynamic School Branding
+- **Backend**
+  - Complaints CRUD already in `routers/operations.py`: `POST/GET/PUT/DELETE /api/complaints` + `GET /api/complaints/overdue-count`
+  - Filters: `status`, `createdByUsername`, `overdueOnly`; each list row now carries computed `isOverdue` flag
+  - `services/pdf.py` now embeds school logo image (base64 data URI) at the top of both Student and College receipt copies, with graceful fallback when logo is missing/invalid
+- **Frontend**
+  - `LoginPage.js` fetches `/api/settings/school` on mount and renders the configured `logoUrl` (replacing the default GraduationCap gradient square) and `schoolName`. "School Management System" subtitle is hidden once a custom school name is set.
+  - `Layout.js` (sidebar + mobile header) now mirrors that same dynamic branding (logo + school name); polls `/api/complaints/overdue-count` every 60s for admin/super_admin and shows a numeric badge next to the Complaints nav item (rose-500 if any overdue, amber-500 otherwise).
+  - `Complaints.js` (already built in prior session) verified end-to-end: photo capture (`capture="environment"`), due date, priority, status flow Pending → In Progress → Resolved, overdue alert banner for managers, filters, and delete (admin only).
+  - `Dashboard.js` greeting subtitle now uses dynamic school name instead of hardcoded "SchoolPro Management System"
+- **Testing** — `iteration_14.json`: 100% pass (10/10 backend + frontend e2e). No critical bugs. Optional code-review notes about role-gating DELETE /complaints and trusting client-supplied `createdBy*` fields are tracked in backlog.
+
+### 2026-02-28 (earlier fork) — UPDATED Fee Promotion Rules
 - **Backend**
   - `promote_students` rewrite per refined user spec:
     - `total_due = (T1 + T2 + T3 + applicable custom fees) − total paid (active payments)`
@@ -70,6 +82,8 @@
 - Bulk student delete + pagination
 
 ## Prioritized Backlog
+- **P1 — Security** Role-gate `DELETE /api/complaints/{id}` so only admin/super_admin can delete (UI already hides the button but API is open).
+- **P1 — Security** Derive `createdBy*` on complaints from the authenticated session instead of trusting the client payload.
 - **P2 — Refactor** `server.py` (~1586 lines) into routers: `/routes/students.py`, `/routes/fees.py`, `/routes/attendance.py`, etc.
 - **P2 — Security** Add JWT/session auth tokens with route validation (currently role-based trust only)
 - **P3** — Auto-mark attendance as `leave` when a leave request is approved (deferred per user: teacher still marks manually)

@@ -12,9 +12,13 @@ const Dashboard = () => {
     pendingFees: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [schoolName, setSchoolName] = useState('SchoolPro');
 
   useEffect(() => {
     loadStats();
+    api.getSchoolSettings()
+      .then((r) => setSchoolName(r.data?.schoolName || 'SchoolPro'))
+      .catch(() => {});
   }, []);
 
   const loadStats = async () => {
@@ -77,7 +81,7 @@ const Dashboard = () => {
               Good Morning, Admin!
             </h1>
             <p className="text-base font-medium text-slate-600 mt-2" style={{ fontFamily: 'Figtree' }}>
-              Welcome to SchoolPro Management System
+              Welcome to {schoolName}
             </p>
           </div>
           <div className="hidden md:block">
