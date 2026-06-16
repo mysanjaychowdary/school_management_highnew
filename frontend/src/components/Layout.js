@@ -113,8 +113,8 @@ const Layout = () => {
   }, {});
   const groupOrder = ['main', 'academics', 'finance', 'people', 'admin'];
 
-  const sidebarWidth = collapsed ? 'lg:w-[72px]' : 'lg:w-64';
-  const mainOffset = collapsed ? 'lg:ml-[72px]' : 'lg:ml-64';
+  const sidebarWidth = collapsed ? 'lg:w-[72px]' : 'lg:w-56';
+  const mainOffset = collapsed ? 'lg:ml-[72px]' : 'lg:ml-56';
 
   const navProps = {
     collapsed,
