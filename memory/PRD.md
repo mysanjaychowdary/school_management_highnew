@@ -38,7 +38,18 @@
 
 ## CHANGELOG
 
-### 2026-02-28 (this session, part 2) — Dynamic WhatsApp Templates
+### 2026-02-28 (this session, part 4) — Global Loader + Major Design Refresh
+- **New global app loader** — `src/lib/loader.js` attaches axios interceptors that maintain a pending-request counter; `src/components/GlobalLoader.js` is a 3px top progress bar that fades in whenever any HTTP call is in flight. Mounted in Layout, LoginPage, and ParentPortal. Powered by a CSS keyframe `loader-bar` (in index.css).
+- **Classes page** — Simplified card: gradient tile with BookOpen icon stacked above the class number; removed the redundant "Class X" heading text; Edit/Delete icons are always visible (no longer hover-gated) and right-aligned with proper backgrounds.
+- **View Attendance — Daily Records replaced with a proper Attendance Sheet** — bordered grid, sticky Roll & Student columns, date headers with day above/month below, each cell shows a w-7 h-7 rounded letter P (emerald) / A (rose) / H (orange) / - (slate). Zebra row striping + tooltips. Legend chip row at the top.
+- **Admin portal design upgrade**:
+  - Dashboard: dark slate→indigo gradient hero with radial blobs, dynamic greeting (Good Morning/Afternoon/Evening), school chip, today + attendance % glass tiles
+  - Stat cards now sit on a tinted gradient background with an icon tile and `ArrowUpRight` accent + sub-label
+  - Quick action buttons promoted to gradient-bg buttons with arrow chevron
+  - Sidebar: bg-white/80 with backdrop-blur, active item now uses sky→indigo gradient + sky shadow
+- **Testing** — `iteration_16.json`: frontend 100% pass on all 5 areas (loader, classes, attendance sheet, dashboard hero, sidebar).
+
+### 2026-02-28 (this session, part 3) — Dynamic WhatsApp Templates
 - **Backend**
   - New models `WhatsAppTemplate` & `WhatsAppTemplates` in `models.py` (per event: `name` + `componentsJson` raw string)
   - New routes in `routers/operations.py`: `GET /api/settings/whatsapp-templates` and `PUT /api/settings/whatsapp-templates` (validates JSON, returns 400 on parse error)

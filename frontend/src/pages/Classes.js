@@ -223,9 +223,7 @@ const Classes = () => {
                         <span className="text-white font-extrabold text-xl leading-none mt-0.5" style={{ fontFamily: 'Nunito' }}>{cls.className}</span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Class</p>
-                        <p className="text-2xl font-extrabold text-slate-900 leading-tight" style={{ fontFamily: 'Nunito' }}>{cls.className}</p>
-                        <p className="text-xs font-semibold text-slate-500 mt-1 flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{cls.sections.length} section{cls.sections.length !== 1 ? 's' : ''}</p>
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{cls.sections.length} section{cls.sections.length !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
                     {showEdit && (
