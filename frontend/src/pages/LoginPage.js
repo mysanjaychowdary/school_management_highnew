@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useNavigate } from 'react-router-dom';
+import GlobalLoader from '../components/GlobalLoader';
 
 const LoginPage = () => {
   const { login } = useAuth();
@@ -39,6 +40,7 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <GlobalLoader />
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8 justify-center" data-testid="login-branding">

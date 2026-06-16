@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Toaster } from '../components/ui/sonner';
+import GlobalLoader from '../components/GlobalLoader';
 
 const ParentPortal = () => {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -92,6 +93,7 @@ const ParentPortal = () => {
   if (!loggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sky-100 via-white to-emerald-50 flex items-center justify-center p-4">
+        <GlobalLoader />
         <Toaster position="top-right" richColors />
         <div className="w-full max-w-md">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 sm:p-8">
@@ -143,6 +145,7 @@ const ParentPortal = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 lg:pb-0">
+      <GlobalLoader />
       <Toaster position="top-right" richColors />
 
       {/* Sticky Hero Header */}

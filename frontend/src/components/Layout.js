@@ -3,6 +3,8 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 import { api } from '../lib/api';
+import '../lib/loader';
+import GlobalLoader from './GlobalLoader';
 
 const allNavItems = [
   { path: '/', label: 'Dashboard', icon: GraduationCap },
@@ -91,7 +93,7 @@ const Layout = () => {
               <Link key={item.path} to={item.path} data-testid={`nav-${item.label.toLowerCase()}`}
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 ${
-                  isActive ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-100'
+                  isActive ? 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white shadow-lg shadow-sky-200' : 'text-slate-600 hover:bg-slate-100'
                 }`}>
                 <Icon className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1">{item.label}</span>
@@ -124,7 +126,8 @@ const Layout = () => {
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <GlobalLoader />
       {/* Mobile header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -159,7 +162,7 @@ const Layout = () => {
       )}
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:flex w-64 bg-white border-r border-slate-200 fixed h-full flex-col">
+      <div className="hidden lg:flex w-64 bg-white/80 backdrop-blur-sm border-r border-slate-200/80 fixed h-full flex-col shadow-[0_0_30px_rgba(0,0,0,0.04)]">
         <NavContent />
       </div>
 

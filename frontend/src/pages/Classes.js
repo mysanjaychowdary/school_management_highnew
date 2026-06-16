@@ -218,18 +218,20 @@ const Classes = () => {
                   {/* Title row */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-14 h-14 bg-gradient-to-br ${grad} rounded-2xl flex items-center justify-center shadow-md flex-shrink-0`}>
-                        <span className="text-white font-extrabold text-lg leading-none" style={{ fontFamily: 'Nunito' }}>{cls.className}</span>
+                      <div className={`w-16 h-16 bg-gradient-to-br ${grad} rounded-2xl flex flex-col items-center justify-center shadow-md flex-shrink-0`}>
+                        <BookOpen className="w-3.5 h-3.5 text-white/80" />
+                        <span className="text-white font-extrabold text-xl leading-none mt-0.5" style={{ fontFamily: 'Nunito' }}>{cls.className}</span>
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-lg font-extrabold text-slate-900 truncate" style={{ fontFamily: 'Nunito' }}>Class {cls.className}</h3>
-                        <p className="text-xs font-semibold text-slate-500 mt-0.5 flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{cls.sections.length} section{cls.sections.length !== 1 ? 's' : ''}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Class</p>
+                        <p className="text-2xl font-extrabold text-slate-900 leading-tight" style={{ fontFamily: 'Nunito' }}>{cls.className}</p>
+                        <p className="text-xs font-semibold text-slate-500 mt-1 flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{cls.sections.length} section{cls.sections.length !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
                     {showEdit && (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                        <button onClick={() => openEdit(cls)} data-testid={`edit-class-${cls.className}`} aria-label="Edit class" className="p-2 rounded-lg hover:bg-sky-100 text-slate-500 hover:text-sky-600 transition-colors"><Edit className="w-4 h-4" /></button>
-                        <button onClick={() => setDeleteTarget(cls)} data-testid={`delete-class-${cls.className}`} aria-label="Delete class" className="p-2 rounded-lg hover:bg-rose-100 text-slate-500 hover:text-rose-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => openEdit(cls)} data-testid={`edit-class-${cls.className}`} aria-label="Edit class" className="p-2 rounded-lg bg-slate-50 hover:bg-sky-100 text-slate-500 hover:text-sky-600 transition-colors"><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => setDeleteTarget(cls)} data-testid={`delete-class-${cls.className}`} aria-label="Delete class" className="p-2 rounded-lg bg-slate-50 hover:bg-rose-100 text-slate-500 hover:text-rose-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )}
                   </div>
