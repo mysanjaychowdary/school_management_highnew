@@ -131,6 +131,39 @@ async def update_school_settings(data: SchoolSettings):
     await db.settings.update_one({"type": "school"}, {"$set": {"schoolName": data.schoolName, "schoolAddress": data.schoolAddress, "logoUrl": data.logoUrl or ""}}, upsert=True)
     return {"message": "School settings updated"}
 
+@router.get("/settings/whatsapp-templates")
+async def get_whatsapp_templates():
+    doc = await db.settings.find_one({"type": "whatsapp_templates"}, {"_id": 0})
+    if not doc:
+        return {"absent": {"name": "", "componentsJson": ""}, "fee_paid": {"name": "", "componentsJson": ""}, "event": {"name": "", "componentsJson": ""}}
+    return {
+        "absent": doc.get("absent") or {"name": "", "componentsJson": ""},
+        "fee_paid": doc.get("fee_paid") or {"name": "", "componentsJson": ""},
+        "event": doc.get("event") or {"name": "", "componentsJson": ""},
+    }
+
+@router.put("/settings/whatsapp-templates")
+async def update_whatsapp_templates(data: WhatsAppTemplates):
+    # Validate componentsJson is valid JSON (when provided)
+    import json as _json
+    for key in ("absent", "fee_paid", "event"):
+        t = getattr(data, key)
+        if t.componentsJson and t.componentsJson.strip():
+            try:
+                _json.loads(t.componentsJson)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON for {key} template: {e}")
+    await db.settings.update_one(
+        {"type": "whatsapp_templates"},
+        {"$set": {
+            "absent": data.absent.model_dump(),
+            "fee_paid": data.fee_paid.model_dump(),
+            "event": data.event.model_dump(),
+        }},
+        upsert=True
+    )
+    return {"message": "WhatsApp templates updated"}
+
 # ==================== FILE UPLOAD ====================
 
 @router.post("/upload")

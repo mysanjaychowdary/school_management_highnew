@@ -158,6 +158,15 @@ class WhatsAppSettings(BaseModel):
     phoneNumberId: str
     accessToken: str
 
+class WhatsAppTemplate(BaseModel):
+    name: str = ""
+    componentsJson: str = ""  # raw JSON string, may contain {{placeholders}}
+
+class WhatsAppTemplates(BaseModel):
+    absent: WhatsAppTemplate = WhatsAppTemplate()
+    fee_paid: WhatsAppTemplate = WhatsAppTemplate()
+    event: WhatsAppTemplate = WhatsAppTemplate()
+
 class SchoolSettings(BaseModel):
     schoolName: str
     schoolAddress: str
