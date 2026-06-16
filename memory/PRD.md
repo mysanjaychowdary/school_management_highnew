@@ -38,7 +38,18 @@
 
 ## CHANGELOG
 
-### 2026-02-28 (this session) — Complaints Module + Dynamic School Branding
+### 2026-02-28 (this session, part 2) — Dynamic WhatsApp Templates
+- **Backend**
+  - New models `WhatsAppTemplate` & `WhatsAppTemplates` in `models.py` (per event: `name` + `componentsJson` raw string)
+  - New routes in `routers/operations.py`: `GET /api/settings/whatsapp-templates` and `PUT /api/settings/whatsapp-templates` (validates JSON, returns 400 on parse error)
+  - `services/whatsapp.py` refactored: added `_substitute_placeholders` (regex `{{key}}` walk over nested dict/list/str), `_get_custom_template`, `_send_custom_or_default`. `send_absent_message`, `send_fee_paid_message`, `send_event_message` now check DB for custom template first and substitute placeholders before calling Meta; fall back to hardcoded defaults when not configured.
+  - Placeholders: absent={{student_name}}, {{class_name}}, {{date}} · fee_paid={{amount}}, {{fee_name}}, {{student_name}}, {{invoice_url}} · event={{event_name}}, {{event_date}}
+- **Frontend**
+  - `Settings.js` new "Templates" tab (super_admin gated) with 3 cards (Absent / Fee Receipt / Event). Each card: Template Name input + Components-JSON textarea + "Load example" + "Use default" + chip list of available placeholders. Inline JSON validation before submit.
+  - `api.js`: `getWhatsAppTemplates`, `updateWhatsAppTemplates` helpers.
+- **Testing** — `iteration_15.json`: 8/8 backend + frontend pass; placeholder substitution, JSON validation, fallback-to-default, and persistence all verified.
+
+### 2026-02-28 (this session, part 1) — Complaints Module + Dynamic School Branding
 - **Backend**
   - Complaints CRUD already in `routers/operations.py`: `POST/GET/PUT/DELETE /api/complaints` + `GET /api/complaints/overdue-count`
   - Filters: `status`, `createdByUsername`, `overdueOnly`; each list row now carries computed `isOverdue` flag
