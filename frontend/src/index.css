@@ -18,6 +18,40 @@ body {
 }
 .animate-loader-bar { animation: loader-bar 1.1s ease-in-out infinite; }
 
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* ===== Consistent page header decoration (admin portal) ===== */
+/* Adds an emerald accent bar to all admin page H1s. */
+main h1.tracking-tight {
+  position: relative;
+  padding-left: 18px;
+  line-height: 1.1;
+}
+main h1.tracking-tight::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12%;
+  bottom: 12%;
+  width: 5px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08);
+}
+/* Dashboard hero h1 stays clean (no accent bar) */
+main h1.tracking-tight.text-white::before { display: none; }
+main h1.tracking-tight.text-white { padding-left: 0; }
+
+/* Card surface refinement */
+main .bg-white.rounded-2xl,
+main .bg-white.rounded-3xl {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 28px rgba(15, 23, 42, 0.05);
+}
+
+
 @layer base {
   :root {
     --background: 210 20% 98%;
