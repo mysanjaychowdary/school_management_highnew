@@ -38,6 +38,16 @@
 
 ## CHANGELOG
 
+### 2026-02-28 (this session, part 6) — Per-Module CRUD Permissions
+- **Backend**
+  - `models.py`: `Role`, `RoleCreate`, `RoleUpdate` now include `modulePerms: Dict[str, Dict[str, bool]]` (e.g. `{"homework": {"create": true, "edit": true, "delete": false}}`).
+  - `routers/auth.py`: `get_role_by_name` and `GET /api/roles` backfill `modulePerms: {}` for legacy role docs; login response carries `modulePerms` inside `roleDetails`.
+- **Frontend**
+  - `AuthContext.js`: `canEdit(perms, module?)`, new `canCreate(perms, module?)`, new `canDelete(perms, module?)`. Each checks `modulePerms[module][action]` first, then falls back to the global `canEdit` / `canDelete` flag (backward compatible).
+  - `Roles.js`: redesigned Module Access UI. Each module row has a toggle plus inline C / E / D colored buttons (emerald / sky / rose). Top-right "+C / +E / +D all" shortcuts bulk-apply to every selected module. Auto-migration on edit: when a legacy role with `canEdit: true` is opened, every assigned module is pre-seeded with C=E=true (D=role.canDelete) so admins can fine-tune without losing access. Global `canEdit` / `canDelete` flags renamed to *(fallback)* in the description.
+  - Pages updated to pass module key: Students/Classes/Homework/EventCalendar/Expenses/Inventory/StaffPage/Complaints.
+- **Testing** — `iteration_18.json`: 6/6 backend pytest + 9/9 frontend e2e PASS. Module-level permissions work; legacy roles unaffected; fallback gating verified on Homework page for both teacher (view-only) and admin (full access via fallback).
+
 ### 2026-02-28 (this session, part 5) — TOTAL ADMIN PORTAL REDESIGN + Collapsible Sidebar
 - **Brand new design system** (user choice: surprise me / emerald accent / consistent page headers): warm school-admin aesthetic with deep slate-950 sidebar + emerald-500 accents + light cream-tinted content.
 - **Layout** (`Layout.js` rewrite): dark slate-950 sidebar; nav grouped into **Academics / Finance / People / System**; active item shows emerald gradient bg + left accent bar + emerald-300 text; user footer with avatar, name, role, and logout. Mobile drawer slides in from the left with the same dark theme.
