@@ -15,7 +15,7 @@ const prioColor = (p) => p === 'high' ? 'bg-rose-100 text-rose-700' : p === 'low
 
 const Complaints = () => {
   const { user, role, perms } = useAuth();
-  const isManager = canEdit(perms) || role === 'super_admin' || role === 'admin_role'; // admin/super can manage all
+  const isManager = canEdit(perms, 'complaints') || role === 'super_admin' || role === 'admin_role'; // admin/super can manage all
   const myUsername = user?.username || '';
 
   const [complaints, setComplaints] = useState([]);

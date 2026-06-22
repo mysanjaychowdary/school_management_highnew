@@ -50,7 +50,10 @@ async def get_role_by_name(role_name: str):
     await ensure_system_roles()
     r = await db.roles.find_one({"roleName": role_name}, {"_id": 0})
     if not r:
-        return {"roleName": role_name, "label": role_name, "modules": [], "canEdit": False, "canDelete": False, "canExport": False, "canEditFees": False, "canRevertFees": False, "canApproveConcession": False, "canSeeFullMobile": False, "isSystem": False}
+        return {"roleName": role_name, "label": role_name, "modules": [], "canEdit": False, "canDelete": False, "canExport": False, "canEditFees": False, "canRevertFees": False, "canApproveConcession": False, "canSeeFullMobile": False, "modulePerms": {}, "isSystem": False}
+    # Ensure modulePerms always present for older role documents
+    if "modulePerms" not in r or r.get("modulePerms") is None:
+        r["modulePerms"] = {}
     return r
 
 # ==================== ROLES CRUD ====================
@@ -59,6 +62,10 @@ async def get_role_by_name(role_name: str):
 async def list_roles():
     await ensure_system_roles()
     roles = await db.roles.find({}, {"_id": 0}).to_list(500)
+    # Backfill modulePerms on legacy docs
+    for r in roles:
+        if "modulePerms" not in r or r.get("modulePerms") is None:
+            r["modulePerms"] = {}
     # System roles first, then by name
     roles.sort(key=lambda r: (not r.get('isSystem', False), r.get('roleName', '')))
     return roles

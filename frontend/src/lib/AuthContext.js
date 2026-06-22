@@ -7,6 +7,7 @@ const DEFAULT_PERMS = {
   modules: [],
   canEdit: false, canDelete: false, canExport: false,
   canEditFees: false, canRevertFees: false, canApproveConcession: false, canSeeFullMobile: false,
+  modulePerms: {},
 };
 
 // Module key -> route path
@@ -88,9 +89,43 @@ export const canAccess = (perms, path) => {
 export const getNavItems = (perms) => (perms?.modules || []);
 
 // Role-based capability checks — now driven by perms object (NOT hardcoded role strings)
-export const canEdit = (roleOrPerms) => {
+// Optional `module` arg lets pages check per-module CRUD permissions.
+// If modulePerms[module][action] is explicitly true|false, that wins; otherwise we fall
+// back to the global canEdit / canDelete flag for backward compatibility.
+const _modulePerm = (perms, module, action) => {
+  if (!perms || !module) return undefined;
+  const mp = perms.modulePerms || {};
+  const m = mp[module];
+  if (!m) return undefined;
+  const v = m[action];
+  return typeof v === 'boolean' ? v : undefined;
+};
+
+export const canEdit = (roleOrPerms, module) => {
   const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
-  return p ? !!p.canEdit : false;
+  if (!p) return false;
+  const override = _modulePerm(p, module, 'edit');
+  if (override !== undefined) return override;
+  return !!p.canEdit;
+};
+
+export const canCreate = (roleOrPerms, module) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  if (!p) return false;
+  const override = _modulePerm(p, module, 'create');
+  if (override !== undefined) return override;
+  // Falls back to canEdit since the existing single flag covered create+edit
+  return !!p.canEdit;
+};
+
+export const canDelete = (roleOrPerms, module) => {
+  const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;
+  if (!p) return false;
+  const override = _modulePerm(p, module, 'delete');
+  if (override !== undefined) return override;
+  // Existing UIs gated delete with canEdit too (legacy behavior). Honor canDelete when set, else canEdit.
+  if (typeof p.canDelete === 'boolean' && p.canDelete) return true;
+  return !!p.canEdit;
 };
 export const canEditFees = (roleOrPerms) => {
   const p = typeof roleOrPerms === 'object' ? roleOrPerms : null;

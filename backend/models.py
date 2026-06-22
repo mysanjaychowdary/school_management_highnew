@@ -408,6 +408,9 @@ class Role(BaseModel):
     canRevertFees: bool = False
     canApproveConcession: bool = False
     canSeeFullMobile: bool = False
+    # Per-module CRUD permissions: { "<moduleKey>": {"create": bool, "edit": bool, "delete": bool} }
+    # When a module entry is absent/empty, falls back to global canEdit / canDelete flags.
+    modulePerms: Dict[str, Dict[str, bool]] = Field(default_factory=dict)
     isSystem: bool = False
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -423,6 +426,7 @@ class RoleCreate(BaseModel):
     canRevertFees: bool = False
     canApproveConcession: bool = False
     canSeeFullMobile: bool = False
+    modulePerms: Dict[str, Dict[str, bool]] = Field(default_factory=dict)
 
 
 class RoleUpdate(BaseModel):
@@ -435,6 +439,7 @@ class RoleUpdate(BaseModel):
     canRevertFees: Optional[bool] = None
     canApproveConcession: Optional[bool] = None
     canSeeFullMobile: Optional[bool] = None
+    modulePerms: Optional[Dict[str, Dict[str, bool]]] = None
 
 
 class Complaint(BaseModel):

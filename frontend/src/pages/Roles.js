@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const PERMISSION_FLAGS = [
-  { key: 'canEdit', label: 'Edit Records', desc: 'Edit students, inventory, staff, etc.' },
-  { key: 'canDelete', label: 'Delete Records', desc: 'Delete students, items, etc.' },
+  { key: 'canEdit', label: 'Edit Records (fallback)', desc: 'Default for modules without per-module setting above.' },
+  { key: 'canDelete', label: 'Delete Records (fallback)', desc: 'Default delete permission when no per-module override.' },
   { key: 'canExport', label: 'Export Data', desc: 'CSV / Excel exports' },
   { key: 'canSeeFullMobile', label: 'Full Mobile Numbers', desc: 'See unmasked phone numbers' },
   { key: 'canEditFees', label: 'Edit Fee Types', desc: 'Create / edit / delete fee types' },
@@ -23,6 +23,7 @@ const blankForm = {
   roleName: '', label: '', modules: [],
   canEdit: false, canDelete: false, canExport: false,
   canEditFees: false, canRevertFees: false, canApproveConcession: false, canSeeFullMobile: false,
+  modulePerms: {},
 };
 
 const Roles = () => {
@@ -42,6 +43,11 @@ const Roles = () => {
   const openCreate = () => { setEditing(null); setForm(blankForm); setShowDialog(true); };
   const openEdit = (role) => {
     if (role.roleName === 'super_admin') { toast.error('super_admin role cannot be modified'); return; }
+    // Auto-migrate: when modulePerms is empty AND legacy canEdit is on, seed CRUD=true for every module in this role.
+    const legacyMigration = {};
+    if ((!role.modulePerms || Object.keys(role.modulePerms).length === 0) && role.canEdit) {
+      (role.modules || []).forEach((m) => { legacyMigration[m] = { create: true, edit: true, delete: !!role.canDelete }; });
+    }
     setEditing(role);
     setForm({
       roleName: role.roleName, label: role.label || role.roleName,
@@ -49,6 +55,7 @@ const Roles = () => {
       canEdit: !!role.canEdit, canDelete: !!role.canDelete, canExport: !!role.canExport,
       canEditFees: !!role.canEditFees, canRevertFees: !!role.canRevertFees,
       canApproveConcession: !!role.canApproveConcession, canSeeFullMobile: !!role.canSeeFullMobile,
+      modulePerms: { ...(role.modulePerms || {}), ...legacyMigration },
     });
     setShowDialog(true);
   };
@@ -56,10 +63,35 @@ const Roles = () => {
   const toggleModule = (key) => {
     setForm((f) => {
       const has = f.modules.includes(key);
-      return { ...f, modules: has ? f.modules.filter((m) => m !== key) : [...f.modules, key] };
+      const nextModules = has ? f.modules.filter((m) => m !== key) : [...f.modules, key];
+      const nextModulePerms = { ...f.modulePerms };
+      if (has) {
+        delete nextModulePerms[key];
+      } else if (!nextModulePerms[key]) {
+        nextModulePerms[key] = { create: false, edit: false, delete: false };
+      }
+      return { ...f, modules: nextModules, modulePerms: nextModulePerms };
     });
   };
   const togglePerm = (key) => setForm((f) => ({ ...f, [key]: !f[key] }));
+
+  const toggleModuleCrud = (moduleKey, action) => {
+    setForm((f) => {
+      const current = f.modulePerms[moduleKey] || { create: false, edit: false, delete: false };
+      return { ...f, modulePerms: { ...f.modulePerms, [moduleKey]: { ...current, [action]: !current[action] } } };
+    });
+  };
+
+  const applyGlobalToAllModules = (action) => {
+    setForm((f) => {
+      const next = { ...f.modulePerms };
+      f.modules.forEach((m) => {
+        next[m] = { ...(next[m] || { create: false, edit: false, delete: false }), [action]: true };
+      });
+      return { ...f, modulePerms: next };
+    });
+    toast.success(`Granted ${action} on all ${form.modules.length} module(s)`);
+  };
 
   const handleSave = async () => {
     if (!editing && !form.roleName) { toast.error('Role name required'); return; }
@@ -112,20 +144,56 @@ const Roles = () => {
                 </div>
               </div>
 
-              {/* Module access */}
+              {/* Module access + per-module CRUD */}
               <div>
-                <Label className="text-base">Module Access</Label>
-                <p className="text-xs text-slate-500 mb-2">Select which sections this role can see in the side nav</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 border border-slate-200 rounded-xl">
+                <div className="flex items-end justify-between mb-2">
+                  <div>
+                    <Label className="text-base">Module Access &amp; Permissions</Label>
+                    <p className="text-xs text-slate-500">Select modules this role can see, then granularly enable Create / Edit / Delete per module.</p>
+                  </div>
+                  {form.modules.length > 0 && (
+                    <div className="flex flex-wrap gap-1 text-[10px] font-bold">
+                      <button type="button" onClick={() => applyGlobalToAllModules('create')} data-testid="apply-create-all" className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors">+C all</button>
+                      <button type="button" onClick={() => applyGlobalToAllModules('edit')} data-testid="apply-edit-all" className="px-2 py-1 rounded-md bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors">+E all</button>
+                      <button type="button" onClick={() => applyGlobalToAllModules('delete')} data-testid="apply-delete-all" className="px-2 py-1 rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200 transition-colors">+D all</button>
+                    </div>
+                  )}
+                </div>
+                <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-72 overflow-y-auto">
                   {AVAILABLE_MODULES.map((m) => {
                     const checked = form.modules.includes(m.key);
+                    const mp = form.modulePerms[m.key] || { create: false, edit: false, delete: false };
                     return (
-                      <button key={m.key} type="button" data-testid={`module-toggle-${m.key}`} onClick={() => toggleModule(m.key)} className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors text-left ${checked ? 'bg-sky-500 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
-                        {checked ? '✓ ' : ''}{m.label}
-                      </button>
+                      <div key={m.key} className={`flex items-center gap-3 px-3 py-2 ${checked ? 'bg-emerald-50/40' : ''}`}>
+                        <button type="button" data-testid={`module-toggle-${m.key}`} onClick={() => toggleModule(m.key)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors min-w-[130px] text-left ${checked ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                          <span className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[10px] ${checked ? 'bg-white border-white text-emerald-600' : 'border-slate-300'}`}>{checked ? '✓' : ''}</span>
+                          {m.label}
+                        </button>
+                        {checked && (
+                          <div className="flex items-center gap-1 ml-auto">
+                            {['create', 'edit', 'delete'].map((action) => {
+                              const colorOn = action === 'create' ? 'bg-emerald-500 text-white' : action === 'edit' ? 'bg-sky-500 text-white' : 'bg-rose-500 text-white';
+                              const colorOff = 'bg-slate-100 text-slate-400 hover:bg-slate-200';
+                              const isOn = !!mp[action];
+                              const letter = action[0].toUpperCase();
+                              return (
+                                <button key={action} type="button"
+                                  data-testid={`module-${m.key}-${action}`}
+                                  onClick={() => toggleModuleCrud(m.key, action)}
+                                  title={action.charAt(0).toUpperCase() + action.slice(1)}
+                                  className={`w-7 h-7 rounded-md text-[11px] font-extrabold transition-all ${isOn ? colorOn : colorOff}`}>
+                                  {letter}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">Tip: when a module&apos;s C/E/D are all OFF, the role gets view-only access to that module.</p>
               </div>
 
               {/* Permission flags */}

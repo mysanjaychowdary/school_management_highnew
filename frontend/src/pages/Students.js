@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 const Students = () => {
   const { role, perms } = useAuth();
-  const showEdit = canEdit(perms);
+  const showEdit = canEdit(perms, 'students');
   const showExport = canExport(perms);
   const showFullMobile = canSeeFullMobile(perms);
   const navigate = useNavigate();

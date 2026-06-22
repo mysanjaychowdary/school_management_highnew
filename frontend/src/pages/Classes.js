@@ -23,7 +23,7 @@ const gradFor = (s) => GRADIENTS[(s || '').split('').reduce((a, c) => a + c.char
 
 const Classes = () => {
   const { role, perms } = useAuth();
-  const showEdit = canEdit(perms);
+  const showEdit = canEdit(perms, 'classes');
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);

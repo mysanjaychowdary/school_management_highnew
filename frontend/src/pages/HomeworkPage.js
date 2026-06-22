@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 const HomeworkPage = () => {
   const { user, role, perms } = useAuth();
-  const showEdit = canEdit(perms);
+  const showEdit = canEdit(perms, 'homework');
   const defaultAssignedBy = user?.name || user?.username || '';
   const [homework, setHomework] = useState([]);
   const [classes, setClasses] = useState([]);

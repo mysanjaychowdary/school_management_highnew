@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 const Inventory = () => {
   const { role, perms } = useAuth();
-  const showEdit = canEdit(perms);
+  const showEdit = canEdit(perms, 'inventory');
   const [items, setItems] = useState([]);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);

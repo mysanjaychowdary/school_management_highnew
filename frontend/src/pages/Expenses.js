@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 const Expenses = () => {
   const { perms } = useAuth();
-  const showEdit = canEdit(perms);
+  const showEdit = canEdit(perms, 'expenses');
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
