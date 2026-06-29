@@ -106,7 +106,17 @@ const Settings = () => {
   };
   const handleSaveDb = async (e) => {
     e.preventDefault();
-    try { setSavingDb(true); setDbStatus(null); await api.updateDatabaseSettings(dbS); setDbStatus('success'); toast.success('Database connected!'); } catch (e) { setDbStatus('error'); toast.error(e.response?.data?.detail || 'Failed'); } finally { setSavingDb(false); }
+    try {
+      setSavingDb(true);
+      setDbStatus(null);
+      const r = await api.updateDatabaseSettings(dbS);
+      setDbStatus('success');
+      const msg = r?.data?.message || 'Saved. Restart the backend for changes to take effect.';
+      toast.success(msg, { duration: 8000 });
+    } catch (err) {
+      setDbStatus('error');
+      toast.error(err.response?.data?.detail || 'Failed');
+    } finally { setSavingDb(false); }
   };
   const handleSaveSchool = async (e) => {
     e.preventDefault();

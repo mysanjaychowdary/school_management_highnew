@@ -30,8 +30,16 @@ async def get_database_settings():
 
 @router.put("/settings/database")
 async def update_database_settings(data: DatabaseSettings):
-    global client, db
-    # Add authSource=admin if not already in URL for authenticated connections
+    """Validate and persist a new MongoDB connection.
+
+    Does NOT swap the live connection (other routers cached their db reference
+    at boot). Saves the URL to the settings collection and to backend/.env so
+    the next backend restart picks it up.
+    """
+    # Import here so a missing motor package never crashes the whole module
+    from motor.motor_asyncio import AsyncIOMotorClient
+
+    # Append authSource=admin for authenticated URLs that omit it
     mongo_url = data.mongoUrl
     if '@' in mongo_url and 'authSource' not in mongo_url:
         if '?' not in mongo_url:
@@ -40,19 +48,61 @@ async def update_database_settings(data: DatabaseSettings):
             mongo_url = f"{mongo_url}?authSource=admin"
         else:
             mongo_url = f"{mongo_url}&authSource=admin"
+
+    # Validate the new connection by issuing a ping (fail fast - 5s timeout)
     try:
         test_client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
         await test_client[data.dbName].command('ping')
         test_client.close()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not connect: {str(e)}")
-    # Switch connection
-    client.close()
-    client = AsyncIOMotorClient(mongo_url)
-    db = client[data.dbName]
-    # Save settings in the NEW database
-    await db.settings.update_one({"type": "database"}, {"$set": {"mongoUrl": data.mongoUrl, "dbName": data.dbName}}, upsert=True)
-    return {"message": "Database connected successfully"}
+
+    # Persist to the CURRENT database so we have an audit trail
+    await db.settings.update_one(
+        {"type": "database"},
+        {"$set": {"mongoUrl": data.mongoUrl, "dbName": data.dbName, "normalizedUrl": mongo_url}},
+        upsert=True,
+    )
+
+    # Write the new MONGO_URL / DB_NAME to backend/.env so the next boot uses it
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                lines = f.readlines()
+        else:
+            lines = []
+        keys_set = {"MONGO_URL": False, "DB_NAME": False}
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('MONGO_URL='):
+                new_lines.append(f'MONGO_URL={mongo_url}\n')
+                keys_set["MONGO_URL"] = True
+            elif stripped.startswith('DB_NAME='):
+                new_lines.append(f'DB_NAME={data.dbName}\n')
+                keys_set["DB_NAME"] = True
+            else:
+                new_lines.append(line)
+        if not keys_set["MONGO_URL"]:
+            new_lines.append(f'MONGO_URL={mongo_url}\n')
+        if not keys_set["DB_NAME"]:
+            new_lines.append(f'DB_NAME={data.dbName}\n')
+        with open(env_path, 'w') as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logging.warning(f"Could not update .env file: {e}")
+        # Setting is still saved to DB — operator can apply manually
+        return {
+            "message": "Connection validated and saved, but .env update failed. Update MONGO_URL / DB_NAME manually then restart backend.",
+            "restart_required": True,
+            "warning": str(e),
+        }
+
+    return {
+        "message": "Connection validated and saved. Restart the backend for changes to take effect.",
+        "restart_required": True,
+    }
 
 # ==================== LEAVE REQUEST ROUTES ====================
 
