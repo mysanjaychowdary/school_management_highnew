@@ -52,8 +52,6 @@ export const api = {
   // Settings
   getWhatsAppSettings: () => axios.get(`${API}/settings/whatsapp`),
   updateWhatsAppSettings: (data) => axios.put(`${API}/settings/whatsapp`, data),
-  getDatabaseSettings: () => axios.get(`${API}/settings/database`),
-  updateDatabaseSettings: (data) => axios.put(`${API}/settings/database`, data),
   getSchoolSettings: () => axios.get(`${API}/settings/school`),
   updateSchoolSettings: (data) => axios.put(`${API}/settings/school`, data),
   getWhatsAppTemplates: () => axios.get(`${API}/settings/whatsapp-templates`),

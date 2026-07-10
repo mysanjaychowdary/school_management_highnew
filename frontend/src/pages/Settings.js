@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, MessageSquare, Database, CheckCircle, XCircle, GraduationCap, FileCode2 } from 'lucide-react';
+import { Save, MessageSquare, GraduationCap, FileCode2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
@@ -64,12 +64,9 @@ const EVENT_DEFS = [
 const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [savingWA, setSavingWA] = useState(false);
-  const [savingDb, setSavingDb] = useState(false);
   const [savingSchool, setSavingSchool] = useState(false);
   const [savingTpl, setSavingTpl] = useState(false);
-  const [dbStatus, setDbStatus] = useState(null);
   const [wa, setWa] = useState({ phoneNumberId: '', accessToken: '' });
-  const [dbS, setDbS] = useState({ mongoUrl: '', dbName: '' });
   const [school, setSchool] = useState({ schoolName: '', schoolAddress: '', logoUrl: '' });
   const [templates, setTemplates] = useState({
     absent: { name: '', componentsJson: '' },
@@ -82,14 +79,12 @@ const Settings = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const [waR, dbR, schR, tplR] = await Promise.all([
+      const [waR, schR, tplR] = await Promise.all([
         api.getWhatsAppSettings(),
-        api.getDatabaseSettings(),
         api.getSchoolSettings(),
         api.getWhatsAppTemplates(),
       ]);
       setWa(waR.data);
-      setDbS({ mongoUrl: dbR.data.mongoUrl || '', dbName: dbR.data.dbName || '' });
       setSchool({ schoolName: schR.data.schoolName || '', schoolAddress: schR.data.schoolAddress || '', logoUrl: schR.data.logoUrl || '' });
       setTemplates({
         absent: tplR.data.absent || { name: '', componentsJson: '' },
@@ -103,20 +98,6 @@ const Settings = () => {
   const handleSaveWA = async (e) => {
     e.preventDefault();
     try { setSavingWA(true); await api.updateWhatsAppSettings(wa); toast.success('WhatsApp settings saved'); } catch (e) { toast.error('Failed'); } finally { setSavingWA(false); }
-  };
-  const handleSaveDb = async (e) => {
-    e.preventDefault();
-    try {
-      setSavingDb(true);
-      setDbStatus(null);
-      const r = await api.updateDatabaseSettings(dbS);
-      setDbStatus('success');
-      const msg = r?.data?.message || 'Saved. Restart the backend for changes to take effect.';
-      toast.success(msg, { duration: 8000 });
-    } catch (err) {
-      setDbStatus('error');
-      toast.error(err.response?.data?.detail || 'Failed');
-    } finally { setSavingDb(false); }
   };
   const handleSaveSchool = async (e) => {
     e.preventDefault();
@@ -168,7 +149,6 @@ const Settings = () => {
           <TabsTrigger value="school" data-testid="tab-school" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><GraduationCap className="w-4 h-4 mr-2" />School</TabsTrigger>
           <TabsTrigger value="whatsapp" data-testid="tab-whatsapp" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><MessageSquare className="w-4 h-4 mr-2" />WhatsApp</TabsTrigger>
           <TabsTrigger value="templates" data-testid="tab-templates" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><FileCode2 className="w-4 h-4 mr-2" />Templates</TabsTrigger>
-          <TabsTrigger value="database" data-testid="tab-database" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><Database className="w-4 h-4 mr-2" />Database</TabsTrigger>
         </TabsList>
 
         {/* School Settings */}
@@ -301,22 +281,6 @@ const Settings = () => {
           </div>
         </TabsContent>
 
-        {/* Database */}
-        <TabsContent value="database">
-          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-4 sm:p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-xl flex items-center justify-center"><Database className="w-6 h-6 text-white" /></div>
-              <div><h2 className="text-xl font-bold text-slate-900">Database Connection</h2><p className="text-sm text-slate-600">Connect your MongoDB</p></div>
-            </div>
-            <form onSubmit={handleSaveDb} className="space-y-6">
-              <div><Label className="text-base font-bold">MongoDB URL *</Label><Input required value={dbS.mongoUrl} onChange={(e) => setDbS({ ...dbS, mongoUrl: e.target.value })} className="rounded-xl h-12 mt-2" placeholder="mongodb+srv://..." /></div>
-              <div><Label className="text-base font-bold">Database Name *</Label><Input required value={dbS.dbName} onChange={(e) => setDbS({ ...dbS, dbName: e.target.value })} className="rounded-xl h-12 mt-2" /></div>
-              {dbStatus === 'success' && <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl"><CheckCircle className="w-6 h-6 text-emerald-600" /><p className="text-emerald-800 font-bold">Connected!</p></div>}
-              {dbStatus === 'error' && <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl"><XCircle className="w-6 h-6 text-rose-600" /><p className="text-rose-800 font-bold">Connection failed</p></div>}
-              <div className="flex justify-end"><Button type="submit" disabled={savingDb} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl px-8"><Database className="w-5 h-5 mr-2" />{savingDb ? 'Connecting...' : 'Connect'}</Button></div>
-            </form>
-          </div>
-        </TabsContent>
       </Tabs>
     </div>
   );
