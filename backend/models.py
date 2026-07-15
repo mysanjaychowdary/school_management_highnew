@@ -479,3 +479,42 @@ class ComplaintUpdate(BaseModel):
     priority: Optional[str] = None
     dueDate: Optional[str] = None
 
+
+class Bus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    busName: str
+    driverName: str
+    driverUsername: str
+    driverPassword: str
+    status: str = "stopped"  # stopped | driving
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    lastLocationAt: Optional[datetime] = None
+    stopCode: Optional[str] = None
+    stopCodeExpiresAt: Optional[datetime] = None
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class BusCreate(BaseModel):
+    busName: str
+    driverName: str
+    driverUsername: str
+    driverPassword: str
+
+
+class BusUpdate(BaseModel):
+    busName: Optional[str] = None
+    driverName: Optional[str] = None
+    driverUsername: Optional[str] = None
+    driverPassword: Optional[str] = None
+
+
+class BusLocationUpdate(BaseModel):
+    lat: float
+    lng: float
+
+
+class BusStopRequest(BaseModel):
+    code: str
+

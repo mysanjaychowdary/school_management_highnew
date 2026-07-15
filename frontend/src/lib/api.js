@@ -158,4 +158,15 @@ export const api = {
 
   // Invoice
   getInvoiceUrl: (paymentId) => `${API}/fees/invoice/${paymentId}`,
+
+  // Bus Tracking
+  getBuses: () => axios.get(`${API}/buses`),
+  createBus: (data) => axios.post(`${API}/buses`, data),
+  updateBus: (id, data) => axios.put(`${API}/buses/${id}`, data),
+  deleteBus: (id) => axios.delete(`${API}/buses/${id}`),
+  busDriverLogin: (data) => axios.post(`${API}/bus/driver-login`, data),
+  startBus: (id) => axios.post(`${API}/buses/${id}/start`),
+  updateBusLocation: (id, data) => axios.post(`${API}/buses/${id}/location`, data),
+  generateStopCode: (id) => axios.post(`${API}/buses/${id}/generate-stop-code`),
+  stopBus: (id, data) => axios.post(`${API}/buses/${id}/stop`, data),
 };

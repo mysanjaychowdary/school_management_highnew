@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 # ==================== SYSTEM ROLES SEEDING ====================
 
 SYSTEM_ROLES = [
-    {"roleName": "super_admin", "label": "Super Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "roles", "settings"],
+    {"roleName": "super_admin", "label": "Super Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "roles", "settings", "busTracking"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": True, "canRevertFees": True, "canApproveConcession": True, "canSeeFullMobile": True, "isSystem": True},
-    {"roleName": "admin_role", "label": "Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints"],
+    {"roleName": "admin_role", "label": "Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "busTracking"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": False, "canRevertFees": True, "canApproveConcession": False, "canSeeFullMobile": True, "isSystem": True},
     {"roleName": "teacher", "label": "Teacher", "modules": ["students", "attendance", "calendar", "homework", "marks", "approvals", "complaints"],
      "canEdit": False, "canDelete": False, "canExport": False, "canEditFees": False, "canRevertFees": False, "canApproveConcession": False, "canSeeFullMobile": False, "isSystem": True},
@@ -40,9 +40,9 @@ async def ensure_system_roles():
             doc['createdAt'] = doc['createdAt'].isoformat()
             await db.roles.insert_one(doc)
         else:
-            # Patch system roles to ensure 'complaints' module present (idempotent migration)
+            # Patch system roles to ensure newly-added modules (e.g. 'complaints', 'busTracking') are present
             mods = existing.get('modules', [])
-            if 'complaints' not in mods:
+            if any(m not in mods for m in sr['modules']):
                 await db.roles.update_one({"roleName": sr['roleName']}, {"$set": {"modules": sr['modules']}})
 
 async def get_role_by_name(role_name: str):

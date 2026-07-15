@@ -15,7 +15,7 @@ const MODULE_PATHS = {
   dashboard: '/', classes: '/classes', students: '/students', attendance: '/attendance',
   fees: '/fees', expenses: '/expenses', inventory: '/inventory', calendar: '/calendar',
   homework: '/homework', marks: '/marks', staff: '/staff', approvals: '/approvals',
-  roles: '/roles', complaints: '/complaints', settings: '/settings',
+  roles: '/roles', complaints: '/complaints', settings: '/settings', busTracking: '/bus-tracking',
 };
 const PATH_TO_MODULE = Object.fromEntries(Object.entries(MODULE_PATHS).map(([m, p]) => [p, m]));
 
@@ -35,6 +35,7 @@ export const AVAILABLE_MODULES = [
   { key: 'complaints', label: 'Complaints' },
   { key: 'roles', label: 'Roles' },
   { key: 'settings', label: 'Settings' },
+  { key: 'busTracking', label: 'Bus Tracking' },
 ];
 
 export const AuthProvider = ({ children }) => {

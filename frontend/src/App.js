@@ -19,6 +19,8 @@ import Roles from './pages/Roles';
 import Complaints from './pages/Complaints';
 import Settings from './pages/Settings';
 import ParentPortal from './pages/ParentPortal';
+import DriverPortal from './pages/DriverPortal';
+import BusTracking from './pages/BusTracking';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 import { Toaster } from './components/ui/sonner';
@@ -51,6 +53,7 @@ const AppRoutes = () => {
   if (!user) return (
     <Routes>
       <Route path="/parent" element={<ParentPortal />} />
+      <Route path="/driver" element={<DriverPortal />} />
       <Route path="*" element={<LoginPage />} />
     </Routes>
   );
@@ -58,6 +61,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/parent" element={<ParentPortal />} />
+      <Route path="/driver" element={<DriverPortal />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<ProtectedRoute path="/"><Dashboard /></ProtectedRoute>} />
         <Route path="classes" element={<ProtectedRoute path="/classes"><Classes /></ProtectedRoute>} />
@@ -74,6 +78,7 @@ const AppRoutes = () => {
         <Route path="marks" element={<ProtectedRoute path="/marks"><Marks /></ProtectedRoute>} />
         <Route path="roles" element={<ProtectedRoute path="/roles"><Roles /></ProtectedRoute>} />
         <Route path="complaints" element={<ProtectedRoute path="/complaints"><Complaints /></ProtectedRoute>} />
+        <Route path="bus-tracking" element={<ProtectedRoute path="/bus-tracking"><BusTracking /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute path="/settings"><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultRoute(perms)} replace />} />
       </Route>

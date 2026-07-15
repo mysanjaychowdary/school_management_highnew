@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
+import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search, Bus } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 import { api } from '../lib/api';
 import '../lib/loader';
@@ -20,6 +20,7 @@ const allNavItems = [
   { path: '/staff', label: 'Staff', icon: UserCog, group: 'people' },
   { path: '/approvals', label: 'Approvals', icon: ShieldCheck, group: 'people' },
   { path: '/complaints', label: 'Complaints', icon: AlertTriangle, group: 'people' },
+  { path: '/bus-tracking', label: 'Bus Tracking', icon: Bus, group: 'people' },
   { path: '/roles', label: 'Roles', icon: KeyRound, group: 'admin' },
   { path: '/settings', label: 'Settings', icon: Settings, group: 'admin' },
 ];
