@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Upload, Calendar } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth, canEdit } from '../lib/AuthContext';
@@ -23,21 +23,21 @@ const Expenses = () => {
   });
   const [billFile, setBillFile] = useState(null);
 
-  useEffect(() => {
-    loadExpenses();
-  }, [filters]);
+  const loadExpenses = useCallback(async () => {
+  try {
+    setLoading(true);
+    const response = await api.getExpenses(filters);
+    setExpenses(response.data);
+  } catch (error) {
+    toast.error('Failed to load expenses');
+  } finally {
+    setLoading(false);
+  }
+}, [filters]);
 
-  const loadExpenses = async () => {
-    try {
-      setLoading(true);
-      const response = await api.getExpenses(filters);
-      setExpenses(response.data);
-    } catch (error) {
-      toast.error('Failed to load expenses');
-    } finally {
-      setLoading(false);
-    }
-  };
+useEffect(() => {
+  loadExpenses();
+}, [loadExpenses]);
 
   const handleBillUpload = async (e) => {
     const file = e.target.files[0];
