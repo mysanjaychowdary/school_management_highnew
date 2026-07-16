@@ -10,6 +10,7 @@ from routers import academic as academic_router
 from routers import finance as finance_router
 from routers import operations as operations_router
 from routers import bus as bus_router
+from routers import hallticket as hallticket_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ api_router.include_router(academic_router.router)
 api_router.include_router(finance_router.router)
 api_router.include_router(operations_router.router)
 api_router.include_router(bus_router.router)
+api_router.include_router(hallticket_router.router)
 
 app.include_router(api_router)
 

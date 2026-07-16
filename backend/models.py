@@ -387,6 +387,11 @@ class MarkRow(BaseModel):
     marks: float
     maxMarks: Optional[float] = 100
 
+class ExamSummaryRow(BaseModel):
+    studentCode: str
+    total: Optional[float] = None
+    grade: Optional[str] = None
+
 class MarksBulkCreate(BaseModel):
     studentClass: str
     section: str
@@ -395,6 +400,20 @@ class MarksBulkCreate(BaseModel):
     maxMarks: Optional[float] = 100
     recordedBy: Optional[str] = ""
     rows: List[MarkRow]
+    examSummaries: Optional[List[ExamSummaryRow]] = None
+
+class ExamSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    studentId: str
+    studentCode: str
+    studentName: str
+    studentClass: str
+    section: str
+    examName: str
+    total: Optional[float] = None
+    grade: Optional[str] = None
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Role(BaseModel):
@@ -517,4 +536,27 @@ class BusLocationUpdate(BaseModel):
 
 class BusStopRequest(BaseModel):
     code: str
+
+
+class HallTicketSubject(BaseModel):
+    subjectName: str
+    examDate: str
+    examTime: str
+
+
+class HallTicketExam(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    examName: str
+    studentClass: str
+    section: str
+    subjects: List[HallTicketSubject]
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class HallTicketExamCreate(BaseModel):
+    examName: str
+    studentClass: str
+    section: str
+    subjects: List[HallTicketSubject]
 

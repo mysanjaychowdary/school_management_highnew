@@ -21,6 +21,7 @@ import Settings from './pages/Settings';
 import ParentPortal from './pages/ParentPortal';
 import DriverPortal from './pages/DriverPortal';
 import BusTracking from './pages/BusTracking';
+import HallTicket from './pages/HallTicket';
 import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 import { Toaster } from './components/ui/sonner';
@@ -79,6 +80,7 @@ const AppRoutes = () => {
         <Route path="roles" element={<ProtectedRoute path="/roles"><Roles /></ProtectedRoute>} />
         <Route path="complaints" element={<ProtectedRoute path="/complaints"><Complaints /></ProtectedRoute>} />
         <Route path="bus-tracking" element={<ProtectedRoute path="/bus-tracking"><BusTracking /></ProtectedRoute>} />
+        <Route path="hall-tickets" element={<ProtectedRoute path="/hall-tickets"><HallTicket /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute path="/settings"><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to={getDefaultRoute(perms)} replace />} />
       </Route>

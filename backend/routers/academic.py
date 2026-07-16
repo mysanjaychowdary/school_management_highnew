@@ -217,19 +217,20 @@ async def marks_sample_csv(studentClass: str, section: str, examName: Optional[s
     students.sort(key=lambda s: str(s.get('rollNo', '')))
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Student ID", "Name", "Exam Name", "Subject", "Marks", "Max Marks"])
     if subjects:
-        # Multiple rows per student — one for each subject
+        # One row per student — one column per subject, plus manually-filled Total/Grade
+        writer.writerow(["Student ID", "Name", "Exam Name"] + [subj.get('subjectName', '') for subj in subjects] + ["Total", "Grade"])
         for s in students:
-            for subj in subjects:
-                writer.writerow([
-                    s.get('studentCode', s.get('rollNo', '')), s.get('studentName', ''),
-                    examName or '', subj.get('subjectName', ''), '', int(subj.get('maxMarks', 100))
-                ])
+            writer.writerow(
+                [s.get('studentCode', s.get('rollNo', '')), s.get('studentName', ''), examName or '']
+                + ['' for _ in subjects]
+                + ['', '']
+            )
     else:
-        # Fallback: one row per student with blank subject
+        # Fallback: no subjects defined for this class — single generic Marks/Max Marks pair
+        writer.writerow(["Student ID", "Name", "Exam Name", "Marks", "Max Marks", "Total", "Grade"])
         for s in students:
-            writer.writerow([s.get('studentCode', s.get('rollNo', '')), s.get('studentName', ''), examName or '', '', '', '100'])
+            writer.writerow([s.get('studentCode', s.get('rollNo', '')), s.get('studentName', ''), examName or '', '', '100', '', ''])
     output.seek(0)
     filename = f"marks_template_{studentClass}_{section}{('_' + examName) if examName else ''}.csv"
     return StreamingResponse(io.BytesIO(output.getvalue().encode('utf-8')), media_type="text/csv",
@@ -268,6 +269,25 @@ async def create_marks_bulk(data: MarksBulkCreate):
         doc['recordedOn'] = doc['recordedOn'].isoformat()
         await db.marks.insert_one(doc)
         created += 1
+
+    for summary_row in (data.examSummaries or []):
+        if summary_row.total is None and summary_row.grade is None:
+            continue
+        student = await db.students.find_one({"studentCode": summary_row.studentCode}, {"_id": 0})
+        if not student:
+            errors.append(f"{summary_row.studentCode}: not found (total/grade skipped)")
+            continue
+        await db.exam_summaries.delete_many({"studentId": student['id'], "examName": data.examName})
+        summary = ExamSummary(
+            studentId=student['id'], studentCode=summary_row.studentCode,
+            studentName=student.get('studentName', ''),
+            studentClass=data.studentClass, section=data.section,
+            examName=data.examName, total=summary_row.total, grade=summary_row.grade,
+        )
+        summary_doc = summary.model_dump()
+        summary_doc['createdAt'] = summary_doc['createdAt'].isoformat()
+        await db.exam_summaries.insert_one(summary_doc)
+
     return {"created": created, "errors": errors}
 
 
@@ -362,6 +382,68 @@ async def get_marks(studentId: Optional[str] = None, studentClass: Optional[str]
     if examName: query['examName'] = examName
     if subject: query['subject'] = subject
     return await db.marks.find(query, {"_id": 0}).sort("recordedOn", -1).to_list(10000)
+
+def _fallback_grade(pct: float) -> str:
+    if pct >= 90: return "A+"
+    if pct >= 75: return "A"
+    if pct >= 60: return "B"
+    if pct >= 45: return "C"
+    if pct >= 33: return "D"
+    return "F"
+
+@router.get("/marks/exam-summaries")
+async def get_exam_summaries(examName: str, studentClass: Optional[str] = None, section: Optional[str] = None, studentId: Optional[str] = None):
+    query = {"examName": examName}
+    if studentClass: query['studentClass'] = studentClass
+    if section: query['section'] = section
+    if studentId: query['studentId'] = studentId
+    return await db.exam_summaries.find(query, {"_id": 0}).to_list(10000)
+
+@router.get("/marks/progress-card")
+async def get_progress_card(examName: str, studentClass: Optional[str] = None, section: Optional[str] = None, studentId: Optional[str] = None):
+    query = {"examName": examName}
+    if studentClass: query['studentClass'] = studentClass
+    if section: query['section'] = section
+    if studentId: query['studentId'] = studentId
+    marks = await db.marks.find(query, {"_id": 0}).to_list(10000)
+    if not marks:
+        raise HTTPException(status_code=404, detail="No marks found for the given filter")
+
+    by_student: Dict[str, Dict] = {}
+    for m in marks:
+        sid = m.get('studentId')
+        if not sid:
+            continue
+        by_student.setdefault(sid, []).append(m)
+
+    summaries = await db.exam_summaries.find({"examName": examName, "studentId": {"$in": list(by_student.keys())}}, {"_id": 0}).to_list(10000)
+    summary_by_student = {s['studentId']: s for s in summaries}
+
+    student_ids = list(by_student.keys())
+    students = await db.students.find({"id": {"$in": student_ids}}, {"_id": 0}).to_list(10000)
+    student_by_id = {s['id']: s for s in students}
+
+    entries = []
+    for sid, student_marks in by_student.items():
+        student = student_by_id.get(sid)
+        if not student:
+            continue
+        subject_rows = sorted(student_marks, key=lambda m: m.get('subject', ''))
+        sum_marks = sum(m['marks'] for m in subject_rows)
+        sum_max = sum(m.get('maxMarks', 100) for m in subject_rows)
+        pct = (sum_marks / sum_max * 100) if sum_max else 0
+        summary = summary_by_student.get(sid)
+        total = summary['total'] if summary and summary.get('total') is not None else sum_marks
+        grade = summary['grade'] if summary and summary.get('grade') else _fallback_grade(pct)
+        entries.append({
+            "student": student, "examName": examName, "subjectRows": subject_rows,
+            "total": total, "maxTotal": sum_max, "grade": grade,
+        })
+    entries.sort(key=lambda e: str(e['student'].get('rollNo', '')))
+
+    school = await db.settings.find_one({"type": "school"}, {"_id": 0})
+    buf = generate_progress_card_pdf(entries, school)
+    return StreamingResponse(buf, media_type="application/pdf")
 
 @router.get("/marks/distinct")
 async def get_marks_distinct():

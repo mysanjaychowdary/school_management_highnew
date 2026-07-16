@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search, Bus } from 'lucide-react';
+import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search, Bus, Ticket } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 import { api } from '../lib/api';
 import '../lib/loader';
@@ -12,6 +12,7 @@ const allNavItems = [
   { path: '/students', label: 'Students', icon: Users, group: 'academics' },
   { path: '/attendance', label: 'Attendance', icon: ClipboardCheck, group: 'academics' },
   { path: '/marks', label: 'Marks', icon: BarChart3, group: 'academics' },
+  { path: '/hall-tickets', label: 'Hall Tickets', icon: Ticket, group: 'academics' },
   { path: '/homework', label: 'Homework', icon: BookOpenCheck, group: 'academics' },
   { path: '/calendar', label: 'Calendar', icon: CalendarDays, group: 'academics' },
   { path: '/fees', label: 'Fees', icon: DollarSign, group: 'finance' },

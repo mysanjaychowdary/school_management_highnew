@@ -136,6 +136,8 @@ export const api = {
   deleteMark: (id) => axios.delete(`${API}/marks/${id}`),
   bulkDeleteMarks: (data) => axios.post(`${API}/marks/bulk-delete`, data),
   sendExamResults: (data) => axios.post(`${API}/marks/send-exam-notifications`, data),
+  getExamSummaries: (params) => axios.get(`${API}/marks/exam-summaries`, { params }),
+  getMarksProgressCardUrl: (params) => `${API}/marks/progress-card?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v)))}`,
 
   // Subjects
   getSubjects: (params) => axios.get(`${API}/subjects`, { params }),
@@ -169,4 +171,10 @@ export const api = {
   updateBusLocation: (id, data) => axios.post(`${API}/buses/${id}/location`, data),
   generateStopCode: (id) => axios.post(`${API}/buses/${id}/generate-stop-code`),
   stopBus: (id, data) => axios.post(`${API}/buses/${id}/stop`, data),
+
+  // Hall Tickets
+  getHallTicketExams: (params) => axios.get(`${API}/hall-ticket-exams`, { params }),
+  createHallTicketExam: (data) => axios.post(`${API}/hall-ticket-exams`, data),
+  deleteHallTicketExam: (id) => axios.delete(`${API}/hall-ticket-exams/${id}`),
+  getHallTicketPdfUrl: (id) => `${API}/hall-ticket-exams/${id}/pdf`,
 };

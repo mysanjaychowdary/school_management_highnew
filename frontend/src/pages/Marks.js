@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart3, Upload, Download, Filter, Trophy, GitCompareArrows, Book, Plus, Trash2, Edit, Send, Loader2 } from 'lucide-react';
+import { BarChart3, Upload, Download, Filter, Trophy, GitCompareArrows, Book, Plus, Trash2, Edit, Send, Loader2, Printer } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth, canEdit } from '../lib/AuthContext';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ const Marks = () => {
   const [upSubject, setUpSubject] = useState('');
   const [upMaxMarks, setUpMaxMarks] = useState('100');
   const [parsedRows, setParsedRows] = useState([]);
+  const [examSummaryRows, setExamSummaryRows] = useState([]);
   const [fileName, setFileName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,8 +42,10 @@ const Marks = () => {
   const [viewSection, setViewSection] = useState('');
   const [viewExam, setViewExam] = useState('');
   const [viewSubject, setViewSubject] = useState('');
+  const [viewStudent, setViewStudent] = useState('');
   const [distinct, setDistinct] = useState({ exams: [], subjects: [], classes: [] });
   const [viewRows, setViewRows] = useState([]);
+  const [examSummaries, setExamSummaries] = useState([]);
 
   // Analytics state
   const [stats, setStats] = useState(null);
@@ -168,10 +171,16 @@ const Marks = () => {
     } finally { setSendingResults(false); }
   };
 
+  // Wide format: one row per student, one column per subject, plus Total/Grade.
+  // Fixed columns are Student ID / Name / Exam Name / Total / Grade — every other
+  // header is treated as a subject name (matched against the Subjects master for maxMarks).
+  const FIXED_COLS = ['student id', 'studentid', 'student_id', 'code', 'name', 'student name', 'exam name', 'exam', 'examname', 'total', 'grade'];
+
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    if (lines.length < 2) return [];
-    const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    if (lines.length < 2) return { rows: [], examSummaries: [] };
+    const rawHeader = lines[0].split(',').map((h) => h.trim());
+    const header = rawHeader.map((h) => h.toLowerCase());
     const findIdx = (...names) => {
       for (const n of names) { const i = header.findIndex((h) => h === n); if (i !== -1) return i; }
       return -1;
@@ -180,26 +189,54 @@ const Marks = () => {
       code: findIdx('student id', 'studentid', 'student_id', 'code'),
       name: findIdx('name', 'student name'),
       exam: findIdx('exam name', 'exam', 'examname'),
-      subject: findIdx('subject'),
+      total: findIdx('total'),
+      grade: findIdx('grade'),
       marks: findIdx('marks', 'score'),
       max: findIdx('max marks', 'max', 'maxmarks'),
     };
+    // Any column not in the fixed set (and not the legacy single Marks/Max Marks pair) is a subject column
+    const subjectCols = [];
+    rawHeader.forEach((h, i) => {
+      if (FIXED_COLS.includes(h.toLowerCase()) || i === idx.marks || i === idx.max) return;
+      subjectCols.push({ index: i, subjectName: h });
+    });
+
     const rows = [];
+    const examSummaries = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map((c) => c.trim());
       const code = idx.code !== -1 ? cols[idx.code] : '';
-      const marksVal = idx.marks !== -1 ? cols[idx.marks] : '';
-      if (!code || marksVal === '') continue;
-      rows.push({
-        studentCode: code,
-        studentName: idx.name !== -1 ? cols[idx.name] : '',
-        examName: idx.exam !== -1 ? cols[idx.exam] : '',
-        subject: idx.subject !== -1 ? cols[idx.subject] : '',
-        marks: parseFloat(marksVal) || 0,
-        maxMarks: idx.max !== -1 ? parseFloat(cols[idx.max]) || 100 : 100,
-      });
+      if (!code) continue;
+      const studentName = idx.name !== -1 ? cols[idx.name] : '';
+      const examName = idx.exam !== -1 ? cols[idx.exam] : '';
+
+      if (subjectCols.length > 0) {
+        subjectCols.forEach(({ index, subjectName }) => {
+          const marksVal = cols[index];
+          if (marksVal === undefined || marksVal === '') return;
+          const subjMaster = subjects.find((s) => s.subjectName.toLowerCase() === subjectName.toLowerCase());
+          rows.push({
+            studentCode: code, studentName, examName, subject: subjectName,
+            marks: parseFloat(marksVal) || 0,
+            maxMarks: subjMaster?.maxMarks || parseFloat(upMaxMarks) || 100,
+          });
+        });
+      } else if (idx.marks !== -1 && cols[idx.marks] !== '') {
+        // Legacy no-subjects fallback: single Marks/Max Marks column pair
+        rows.push({
+          studentCode: code, studentName, examName, subject: '',
+          marks: parseFloat(cols[idx.marks]) || 0,
+          maxMarks: idx.max !== -1 ? parseFloat(cols[idx.max]) || 100 : 100,
+        });
+      }
+
+      const totalVal = idx.total !== -1 ? cols[idx.total] : '';
+      const gradeVal = idx.grade !== -1 ? cols[idx.grade] : '';
+      if (totalVal !== '' || gradeVal !== '') {
+        examSummaries.push({ studentCode: code, total: totalVal !== '' ? parseFloat(totalVal) : null, grade: gradeVal || null });
+      }
     }
-    return rows;
+    return { rows, examSummaries };
   };
 
   const handleFileChange = (e) => {
@@ -208,15 +245,14 @@ const Marks = () => {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const parsed = parseCsv(ev.target.result);
+      const { rows: parsed, examSummaries } = parseCsv(ev.target.result);
       if (parsed.length === 0) { toast.error('No valid rows found'); return; }
       setParsedRows(parsed);
-      // Auto-detect exam name and subject if all rows share the same value
+      setExamSummaryRows(examSummaries);
+      // Auto-detect exam name if all rows share the same value
       const firstExam = parsed[0].examName;
-      const firstSubject = parsed[0].subject;
       if (firstExam && parsed.every((r) => r.examName === firstExam) && !upExam) setUpExam(firstExam);
-      if (firstSubject && parsed.every((r) => r.subject === firstSubject) && !upSubject) setUpSubject(firstSubject);
-      toast.success(`Parsed ${parsed.length} rows`);
+      toast.success(`Parsed ${parsed.length} mark entries across ${new Set(parsed.map((r) => r.studentCode)).size} students`);
     };
     reader.readAsText(file);
   };
@@ -243,12 +279,13 @@ const Marks = () => {
           marks: r.marks,
           maxMarks: r.maxMarks || parseFloat(upMaxMarks) || 100,
         })),
+        examSummaries: examSummaryRows.length > 0 ? examSummaryRows : undefined,
       };
       const r = await api.createMarksBulk(payload);
       toast.success(`Saved ${r.data.created} marks${r.data.errors?.length ? `, ${r.data.errors.length} errors` : ''}`);
       if (r.data.errors?.length) r.data.errors.forEach((e) => toast.error(e));
       // Reset
-      setParsedRows([]); setFileName('');
+      setParsedRows([]); setFileName(''); setExamSummaryRows([]);
       loadDistinct();
     } catch (e) { toast.error('Import failed'); }
     finally { setSubmitting(false); }
@@ -264,8 +301,19 @@ const Marks = () => {
       const r = await api.getMarks(params);
       setViewRows(r.data);
       if (r.data.length === 0) toast.info('No records');
+      if (viewExam) {
+        const summaryParams = { examName: viewExam };
+        if (viewClass) summaryParams.studentClass = viewClass;
+        if (viewSection) summaryParams.section = viewSection;
+        try { const sr = await api.getExamSummaries(summaryParams); setExamSummaries(sr.data); } catch (e) { setExamSummaries([]); }
+      } else {
+        setExamSummaries([]);
+      }
     } catch (e) { toast.error('Failed to load'); }
   };
+
+  // Distinct students present in the currently loaded view, for the "Print Result" student picker
+  const viewStudents = Array.from(new Map(viewRows.map((r) => [r.studentId, { studentId: r.studentId, studentCode: r.studentCode, studentName: r.studentName }])).values());
 
   const loadStats = async () => {
     try {
@@ -315,7 +363,7 @@ const Marks = () => {
               <div><Label>Exam Name *</Label><Input data-testid="marks-up-exam" value={upExam} onChange={(e) => setUpExam(e.target.value)} className="rounded-xl h-12" placeholder="e.g., Midterm 2026" /></div>
               <div className="md:col-span-2 flex items-end"><Button data-testid="marks-download-sample" onClick={handleDownloadSample} variant="outline" className="font-bold rounded-xl h-12 w-full"><Download className="w-4 h-4 mr-2" />Download Sample CSV</Button></div>
             </div>
-            <p className="text-xs text-slate-500 mt-3">Sample CSV will list each student × subject row (multiple rows per student if multiple subjects are defined for that class). Fill the <span className="font-bold">Marks</span> column and upload below. Manage subjects in the <span className="font-bold">Subjects</span> tab.</p>
+            <p className="text-xs text-slate-500 mt-3">Sample CSV has one row per student with one column per subject, plus <span className="font-bold">Total</span> and <span className="font-bold">Grade</span> columns you can fill in by hand. Fill in the marks and upload below. Manage subjects in the <span className="font-bold">Subjects</span> tab.</p>
             {subjects.filter((s) => !upClass || (s.applicableClasses && s.applicableClasses.includes(upClass)) || (s.applicableClasses || []).length === 0).length === 0 && upClass && (
               <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">No subjects defined for Class {upClass}. Add subjects in the <span className="font-bold">Subjects</span> tab so the CSV pre-fills properly with one row per subject.</div>
             )}
@@ -334,30 +382,53 @@ const Marks = () => {
                 </label>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mb-3">Each row in the CSV has its own Exam Name and Subject — so multiple subjects per student are supported automatically. Fields above are used only when a row leaves them blank.</p>
+            <p className="text-xs text-slate-500 mb-3">Each subject column in the CSV is imported separately per student. Total/Grade columns (if filled) are stored as-is and shown in View Records. Fields above are only used as a fallback if a row leaves Exam Name/Subject blank.</p>
             {fileName && <p className="text-xs text-emerald-600 font-bold">Loaded: {fileName} ({parsedRows.length} rows)</p>}
 
             {parsedRows.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-base font-bold text-slate-800 mb-2">Preview &mdash; {parsedRows.length} students</h3>
-                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Exam</TableHead><TableHead>Subject</TableHead><TableHead className="text-right">Marks</TableHead><TableHead className="text-right">Max</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {parsedRows.map((r, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-bold">{r.studentCode}</TableCell>
-                          <TableCell>{r.studentName}</TableCell>
-                          <TableCell className="text-slate-600">{r.examName || upExam}</TableCell>
-                          <TableCell className="text-slate-600">{r.subject || upSubject}</TableCell>
-                          <TableCell className="text-right font-bold text-emerald-600">{r.marks}</TableCell>
-                          <TableCell className="text-right">{r.maxMarks}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 mb-2">Preview &mdash; {parsedRows.length} mark entries ({new Set(parsedRows.map((r) => r.studentCode)).size} students)</h3>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Exam</TableHead><TableHead>Subject</TableHead><TableHead className="text-right">Marks</TableHead><TableHead className="text-right">Max</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {parsedRows.map((r, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-bold">{r.studentCode}</TableCell>
+                            <TableCell>{r.studentName}</TableCell>
+                            <TableCell className="text-slate-600">{r.examName || upExam}</TableCell>
+                            <TableCell className="text-slate-600">{r.subject || upSubject}</TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">{r.marks}</TableCell>
+                            <TableCell className="text-right">{r.maxMarks}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-                <div className="flex justify-end mt-4">
+
+                {examSummaryRows.length > 0 && (
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 mb-2">Total / Grade Preview &mdash; {examSummaryRows.length} students</h3>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>ID</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Grade</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {examSummaryRows.map((r, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-bold">{r.studentCode}</TableCell>
+                              <TableCell className="text-right">{r.total ?? '-'}</TableCell>
+                              <TableCell>{r.grade || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
                   <Button data-testid="marks-import-btn" onClick={handleImport} disabled={submitting} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl active:scale-95 transition-transform">{submitting ? 'Saving...' : 'Import & Save Marks'}</Button>
                 </div>
               </div>
@@ -368,9 +439,9 @@ const Marks = () => {
         {/* View */}
         <TabsContent value="view" className="space-y-6">
           <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <div><Label>Class</Label>
-                <Select value={viewClass || '_all'} onValueChange={(v) => { setViewClass(v === '_all' ? '' : v); setViewSection(''); }}>
+                <Select value={viewClass || '_all'} onValueChange={(v) => { setViewClass(v === '_all' ? '' : v); setViewSection(''); setViewStudent(''); }}>
                   <SelectTrigger className="rounded-xl h-12"><SelectValue placeholder="All" /></SelectTrigger>
                   <SelectContent><SelectItem value="_all">All</SelectItem>{classes.map((c) => <SelectItem key={c.className} value={c.className}>Class {c.className}</SelectItem>)}</SelectContent>
                 </Select>
@@ -393,6 +464,12 @@ const Marks = () => {
                   <SelectContent><SelectItem value="_all">All</SelectItem>{distinct.subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              <div><Label>Student <span className="text-slate-400 font-normal">(for print)</span></Label>
+                <Select value={viewStudent || '_all'} onValueChange={(v) => setViewStudent(v === '_all' ? '' : v)}>
+                  <SelectTrigger className="rounded-xl h-12"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent><SelectItem value="_all">All</SelectItem>{viewStudents.map((s) => <SelectItem key={s.studentId} value={s.studentId}>{s.studentCode} - {s.studentName}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
               <div className="flex items-end"><Button data-testid="marks-view-load" onClick={loadView} className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12">Load</Button></div>
             </div>
           </div>
@@ -402,6 +479,12 @@ const Marks = () => {
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <p className="text-sm font-bold text-slate-700">{viewRows.length} record(s)</p>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {viewExam && (
+                    <a data-testid="marks-print-result-btn" href={api.getMarksProgressCardUrl({ examName: viewExam, studentClass: viewClass, section: viewSection, studentId: viewStudent })} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl text-sm transition-colors">
+                      <Printer className="w-4 h-4 mr-2" />Print Result
+                    </a>
+                  )}
                   {viewExam && role === 'super_admin' && (
                     <Button data-testid="marks-send-results-btn" onClick={handleSendResults} disabled={sendingResults} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl">
                       {sendingResults ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</> : <><Send className="w-4 h-4 mr-2" />Send Results to Parents</>}
@@ -434,6 +517,25 @@ const Marks = () => {
                       </TableRow>
                     );
                   })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {examSummaries.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
+              <p className="text-sm font-bold text-slate-700 mb-3">Student Summary &mdash; {viewExam} <span className="text-slate-400 font-normal">(Total/Grade entered during upload)</span></p>
+              <Table>
+                <TableHeader><TableRow><TableHead>Student ID</TableHead><TableHead>Name</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Grade</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {examSummaries.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-bold">{s.studentCode}</TableCell>
+                      <TableCell>{s.studentName}</TableCell>
+                      <TableCell className="text-right font-bold">{s.total ?? '-'}</TableCell>
+                      <TableCell><span className="px-2 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{s.grade || '-'}</span></TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
