@@ -335,8 +335,8 @@ async def send_exam_notifications(payload: Dict):
     for sid, entry in by_student.items():
         # Fetch parent mobile from student record
         student = await db.students.find_one({"id": sid}, {"_id": 0}) or await db.students.find_one({"studentCode": entry.get('studentCode')}, {"_id": 0})
-        mobile = (student or {}).get('parentMobile', '').strip()
-        student_name = (student or {}).get('name') or entry.get('studentName') or 'Student'
+        mobile = (student or {}).get('mobile', '').strip()
+        student_name = (student or {}).get('studentName') or entry.get('studentName') or 'Student'
         if not mobile:
             skipped += 1
             details.append({"studentId": sid, "studentName": student_name, "status": "skipped", "reason": "no parent mobile"})
