@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, FileText, Send, BarChart3, Home, MoreHorizontal, ChevronRight } from 'lucide-react';
+import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, FileText, Send, BarChart3, Home, MoreHorizontal, ChevronRight, Bus as BusIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
@@ -21,6 +21,8 @@ const ParentPortal = () => {
   const [leaveForm, setLeaveForm] = useState({ fromDate: '', toDate: '', reason: '', attachmentUrl: '' });
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [branding, setBranding] = useState({ schoolName: 'Parent Portal', logoUrl: '' });
+  const [buses, setBuses] = useState([]);
+  const [busLoading, setBusLoading] = useState(true);
 
   useEffect(() => {
     api.getSchoolSettings()
@@ -34,6 +36,21 @@ const ParentPortal = () => {
       setLeaveRequests(r.data);
     } catch (e) { /* ignore */ }
   }, []);
+
+  const loadBuses = useCallback(async () => {
+    try {
+      const r = await api.getBuses();
+      setBuses(r.data);
+    } catch (e) { /* ignore */ }
+    finally { setBusLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'busTrack') return;
+    loadBuses();
+    const id = setInterval(loadBuses, 10000);
+    return () => clearInterval(id);
+  }, [activeTab, loadBuses]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -50,6 +67,12 @@ const ParentPortal = () => {
 
   const handleLogout = () => { setLoggedIn(false); setDashData(null); setUsername(''); setPassword(''); setActiveTab('overview'); setLeaveRequests([]); };
   const getStatusColor = (s) => s === 'present' ? 'bg-emerald-100 text-emerald-700' : s === 'absent' ? 'bg-rose-100 text-rose-700' : s === 'holiday' ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-600';
+  const busTimeAgo = (iso) => {
+    if (!iso) return null;
+    const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (secs < 60) return `${secs}s ago`;
+    return `${Math.round(secs / 60)}m ago`;
+  };
 
   const handleLeaveAttachment = async (e) => {
     const file = e.target.files[0];
@@ -137,6 +160,7 @@ const ParentPortal = () => {
     { key: 'events', label: 'Events', icon: CalendarDays },
     { key: 'homework', label: 'Homework', icon: BookOpenCheck },
     { key: 'leave', label: 'Leave', icon: FileText },
+    { key: 'busTrack', label: 'Track Bus', icon: BusIcon },
   ];
   // Bottom nav shows top 4 + "More"
   const bottomTabs = tabs.slice(0, 4);
@@ -630,6 +654,50 @@ const ParentPortal = () => {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ========= TRACK BUS ========= */}
+        {activeTab === 'busTrack' && (
+          <div className="bg-white rounded-2xl shadow p-4 sm:p-6 border border-slate-100">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">Live Bus Tracking</h2>
+            {busLoading ? (
+              <div className="flex items-center justify-center h-32"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-500"></div></div>
+            ) : buses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32"><p className="text-slate-400 font-medium">No buses available</p></div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {buses.map((b) => {
+                  const isDriving = b.status === 'driving';
+                  const waiting = isDriving && !b.lastLocationAt;
+                  return (
+                    <div key={b.id} data-testid={`parent-bus-card-${b.id}`} className="border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0"><BusIcon className="w-5 h-5 text-sky-600" /></div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 truncate">{b.busName}</p>
+                            <p className="text-xs text-slate-500 truncate">{b.driverName}</p>
+                          </div>
+                        </div>
+                        {isDriving
+                          ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap bg-emerald-100 text-emerald-700">Driving</span>
+                          : <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap bg-slate-100 text-slate-600">Stopped</span>}
+                      </div>
+                      {isDriving && (
+                        <div className="text-xs text-slate-500">{waiting ? 'Waiting for location...' : `Updated ${busTimeAgo(b.lastLocationAt)}`}</div>
+                      )}
+                      {b.lat != null && b.lng != null && (
+                        <a href={`https://www.google.com/maps?q=${b.lat},${b.lng}`} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-sky-100 text-sky-700 hover:bg-sky-200 rounded-lg font-bold text-xs transition-colors">
+                          <MapPin className="w-3.5 h-3.5" />View on Map
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
