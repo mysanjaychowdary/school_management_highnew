@@ -14,6 +14,7 @@ from db import db
 from models import *
 from services.whatsapp import *
 from services.pdf import *
+import re
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,6 +38,55 @@ from services.pdf import *
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ==================== CUSTOM FIELD ROUTES ====================
+
+RESERVED_STUDENT_KEYS = {
+    "id", "studentCode", "studentName", "rollNo", "studentClass", "section",
+    "fatherName", "motherName", "mobile", "address", "feeTerm1", "feeTerm2", "feeTerm3",
+    "parentUsername", "parentPassword", "customFields", "createdAt",
+}
+
+def _slugify_field_key(label: str) -> str:
+    key = re.sub(r'[^a-zA-Z0-9]+', '_', label.strip()).strip('_').lower()
+    key = re.sub(r'^[0-9_]+', '', key)
+    return key or 'field'
+
+@router.get("/custom-fields")
+async def get_custom_fields():
+    return await db.custom_field_defs.find({}, {"_id": 0}).sort("order", 1).to_list(200)
+
+@router.post("/custom-fields", response_model=CustomFieldDef)
+async def create_custom_field(data: CustomFieldDefCreate):
+    key = _slugify_field_key(data.label)
+    if key in RESERVED_STUDENT_KEYS:
+        raise HTTPException(status_code=400, detail=f"'{data.label}' conflicts with a built-in student field")
+    existing = await db.custom_field_defs.find_one({"key": key}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"A custom field for '{data.label}' already exists")
+    order = await db.custom_field_defs.count_documents({})
+    obj = CustomFieldDef(key=key, label=data.label, required=data.required, order=order)
+    doc = obj.model_dump()
+    doc['createdAt'] = doc['createdAt'].isoformat()
+    await db.custom_field_defs.insert_one(doc)
+    return obj
+
+@router.put("/custom-fields/{field_id}")
+async def update_custom_field(field_id: str, data: CustomFieldDefUpdate):
+    existing = await db.custom_field_defs.find_one({"id": field_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Custom field not found")
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update:
+        await db.custom_field_defs.update_one({"id": field_id}, {"$set": update})
+    return await db.custom_field_defs.find_one({"id": field_id}, {"_id": 0})
+
+@router.delete("/custom-fields/{field_id}")
+async def delete_custom_field(field_id: str):
+    result = await db.custom_field_defs.delete_one({"id": field_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Custom field not found")
+    return {"message": "Custom field deleted"}
+
 # ==================== STUDENT ROUTES ====================
 
 @router.post("/students", response_model=Student)
@@ -56,9 +106,16 @@ async def bulk_upload_students(file: UploadFile = File(...)):
         content = await file.read()
         decoded = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(decoded))
+        field_defs = await db.custom_field_defs.find({}, {"_id": 0}).sort("order", 1).to_list(200)
         added, errors = 0, []
         for row in csv_reader:
             try:
+                custom_values = {}
+                for d in field_defs:
+                    raw = (row.get(d['label']) or '').strip()
+                    if d['required'] and not raw:
+                        raise ValueError(f"Missing required field '{d['label']}'")
+                    custom_values[d['key']] = raw
                 student_data = StudentCreate(
                     studentCode=row['Student ID'].strip(),
                     studentName=row['Student Name'].strip(), rollNo=row['Roll No'].strip(),
@@ -68,6 +125,7 @@ async def bulk_upload_students(file: UploadFile = File(...)):
                     feeTerm1=float(row['Fee Term1']), feeTerm2=float(row['Fee Term2']), feeTerm3=float(row['Fee Term3']),
                     parentUsername=row.get('Parent Username', '').strip() or None,
                     parentPassword=row.get('Parent Password', '').strip() or None,
+                    customFields=custom_values,
                 )
                 existing = await db.students.find_one({"studentCode": student_data.studentCode}, {"_id": 0})
                 if existing:
@@ -86,11 +144,14 @@ async def bulk_upload_students(file: UploadFile = File(...)):
 
 @router.get("/students/sample-csv")
 async def download_sample_csv():
+    field_defs = await db.custom_field_defs.find({}, {"_id": 0}).sort("order", 1).to_list(200)
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Student ID', 'Student Name', 'Roll No', 'Class', 'Section', 'Father Name', 'Mother Name', 'Mobile Number', 'Address', 'Fee Term1', 'Fee Term2', 'Fee Term3', 'Parent Username', 'Parent Password'])
-    writer.writerow(['ADM001', 'John Doe', '1', '1', 'A', 'Robert Doe', 'Jane Doe', '9876543210', '123 Main St', '5000', '5000', '5000', 'parent101', 'pass101'])
-    writer.writerow(['ADM002', 'Alice Smith', '2', '1', 'A', 'Michael Smith', 'Sarah Smith', '9876543211', '456 Oak Ave', '5000', '5000', '5000', 'parent102', 'pass102'])
+    header = ['Student ID', 'Student Name', 'Roll No', 'Class', 'Section', 'Father Name', 'Mother Name', 'Mobile Number', 'Address', 'Fee Term1', 'Fee Term2', 'Fee Term3', 'Parent Username', 'Parent Password']
+    header += [d['label'] for d in field_defs]
+    writer.writerow(header)
+    writer.writerow(['ADM001', 'John Doe', '1', '1', 'A', 'Robert Doe', 'Jane Doe', '9876543210', '123 Main St', '5000', '5000', '5000', 'parent101', 'pass101'] + ['Sample' for _ in field_defs])
+    writer.writerow(['ADM002', 'Alice Smith', '2', '1', 'A', 'Michael Smith', 'Sarah Smith', '9876543211', '456 Oak Ave', '5000', '5000', '5000', 'parent102', 'pass102'] + ['Sample' for _ in field_defs])
     output.seek(0)
     return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=sample_students.csv"})
 

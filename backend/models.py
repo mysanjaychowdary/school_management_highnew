@@ -57,6 +57,7 @@ class Student(BaseModel):
     feeTerm3: float
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
+    customFields: Dict[str, str] = {}
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class StudentCreate(BaseModel):
@@ -74,6 +75,7 @@ class StudentCreate(BaseModel):
     feeTerm3: float
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
+    customFields: Dict[str, str] = {}
 
 class StudentUpdate(BaseModel):
     studentCode: Optional[str] = None
@@ -90,6 +92,25 @@ class StudentUpdate(BaseModel):
     feeTerm3: Optional[float] = None
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
+    customFields: Optional[Dict[str, str]] = None
+
+class CustomFieldDef(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    key: str
+    label: str
+    required: bool = False
+    order: int = 0
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class CustomFieldDefCreate(BaseModel):
+    label: str
+    required: bool = False
+
+class CustomFieldDefUpdate(BaseModel):
+    label: Optional[str] = None
+    required: Optional[bool] = None
+    order: Optional[int] = None
 
 class AttendanceRecord(BaseModel):
     model_config = ConfigDict(extra="ignore")

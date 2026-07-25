@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Upload, Download, Search, Edit, Trash2, TrendingUp, Filter, Eye, ArrowRight } from 'lucide-react';
+import { Plus, Upload, Download, Search, Edit, Trash2, TrendingUp, Filter, Eye, ArrowRight, Settings as SettingsIcon, Check, X } from 'lucide-react';
 import { useAuth, canEdit, canExport, canSeeFullMobile, maskMobile } from '../lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -33,7 +33,13 @@ const Students = () => {
     studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '',
     fatherName: '', motherName: '', mobile: '', address: '',
     feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '',
+    customFields: {},
   });
+  const [customFieldDefs, setCustomFieldDefs] = useState([]);
+  const [showFieldsDialog, setShowFieldsDialog] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [editingField, setEditingField] = useState(null); // { id, label, required }
   const [promoteData, setPromoteData] = useState({ fromClass: '', toClass: '' });
   const [promotePreview, setPromotePreview] = useState(null); // bulk preview
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -45,6 +51,10 @@ const Students = () => {
 
   const loadClasses = useCallback(async () => {
     try { const r = await api.getClasses(); setClasses(r.data); } catch (e) { /* ignore */ }
+  }, []);
+
+  const loadCustomFields = useCallback(async () => {
+    try { const r = await api.getCustomFields(); setCustomFieldDefs(r.data); } catch (e) { /* ignore */ }
   }, []);
 
   const loadStudents = useCallback(async () => {
@@ -64,6 +74,7 @@ const Students = () => {
 
   useEffect(() => { loadClasses(); }, [loadClasses]);
   useEffect(() => { loadStudents(); }, [loadStudents]);
+  useEffect(() => { loadCustomFields(); }, [loadCustomFields]);
 
   const getSections = (cls) => {
     const found = classes.find((c) => c.className === cls);
@@ -73,6 +84,10 @@ const Students = () => {
   // Use a ref-based updater to avoid re-rendering the whole form on each keystroke
   const updateField = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const updateCustomFieldValue = useCallback((key, value) => {
+    setFormData(prev => ({ ...prev, customFields: { ...prev.customFields, [key]: value } }));
   }, []);
 
   const handleAddStudent = async (e) => {
@@ -206,7 +221,7 @@ const Students = () => {
   };
 
   const resetForm = () => {
-    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '' });
+    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '', customFields: {} });
   };
 
   const openEditDialog = (student) => {
@@ -218,8 +233,37 @@ const Students = () => {
       mobile: student.mobile, address: student.address,
       feeTerm1: student.feeTerm1, feeTerm2: student.feeTerm2, feeTerm3: student.feeTerm3,
       parentUsername: student.parentUsername || '', parentPassword: student.parentPassword || '',
+      customFields: { ...(student.customFields || {}) },
     });
     setShowEditDialog(true);
+  };
+
+  // ----- Custom field definitions (super admin only) -----
+  const handleAddField = async (e) => {
+    e.preventDefault();
+    if (!newFieldLabel.trim()) return;
+    try {
+      await api.createCustomField({ label: newFieldLabel.trim(), required: newFieldRequired });
+      setNewFieldLabel(''); setNewFieldRequired(false);
+      loadCustomFields();
+      toast.success('Field added');
+    } catch (error) { toast.error(error.response?.data?.detail || 'Failed to add field'); }
+  };
+
+  const handleSaveFieldEdit = async () => {
+    if (!editingField || !editingField.label.trim()) return;
+    try {
+      await api.updateCustomField(editingField.id, { label: editingField.label.trim(), required: editingField.required });
+      setEditingField(null);
+      loadCustomFields();
+      toast.success('Field updated');
+    } catch (error) { toast.error('Failed to update field'); }
+  };
+
+  const handleDeleteField = async (id) => {
+    if (!window.confirm('Delete this field? Existing values will no longer be shown.')) return;
+    try { await api.deleteCustomField(id); loadCustomFields(); toast.success('Field deleted'); }
+    catch (error) { toast.error('Failed to delete field'); }
   };
 
   // Inline form fields rendered directly (NOT as a sub-component to avoid focus loss)
@@ -251,6 +295,18 @@ const Students = () => {
       <div><Label>Fee Term 3 *</Label><Input type="number" required value={formData.feeTerm3} onChange={(e) => updateField('feeTerm3', e.target.value)} className="rounded-xl h-12" /></div>
       <div><Label>Parent Username</Label><Input value={formData.parentUsername} onChange={(e) => updateField('parentUsername', e.target.value)} className="rounded-xl h-12" placeholder="For parent portal login" /></div>
       <div><Label>Parent Password</Label><Input value={formData.parentPassword} onChange={(e) => updateField('parentPassword', e.target.value)} className="rounded-xl h-12" placeholder="Parent portal password" /></div>
+      {customFieldDefs.map((def) => (
+        <div key={def.key}>
+          <Label>{def.label}{def.required ? ' *' : ''}</Label>
+          <Input
+            data-testid={`custom-field-${def.key}`}
+            required={def.required}
+            value={formData.customFields?.[def.key] || ''}
+            onChange={(e) => updateCustomFieldValue(def.key, e.target.value)}
+            className="rounded-xl h-12"
+          />
+        </div>
+      ))}
     </div>
   );
 
@@ -284,6 +340,12 @@ const Students = () => {
           </label>}
 
           {showExport && <Button data-testid="download-sample-csv" onClick={handleDownloadSample} variant="outline" className="font-bold rounded-xl"><Download className="w-5 h-5 mr-2" />Sample CSV</Button>}
+
+          {role === 'super_admin' && (
+            <Button data-testid="manage-fields-btn" onClick={() => setShowFieldsDialog(true)} variant="outline" className="font-bold rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 border-violet-200">
+              <SettingsIcon className="w-5 h-5 mr-2" />Manage Fields
+            </Button>
+          )}
 
           {showEdit && selectedIds.length > 0 && (
             <Button data-testid="bulk-delete-btn" onClick={handleBulkDelete} className="bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl active:scale-95 transition-transform">
@@ -530,6 +592,55 @@ const Students = () => {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Custom Fields Dialog (super admin only) */}
+      <Dialog open={showFieldsDialog} onOpenChange={setShowFieldsDialog}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="text-2xl font-bold">Manage Custom Fields</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {customFieldDefs.length === 0 && <p className="text-slate-400 text-sm text-center py-4">No custom fields yet</p>}
+            <div className="space-y-2">
+              {customFieldDefs.map((def) => (
+                <div key={def.id} data-testid={`field-row-${def.key}`} className="border border-slate-200 rounded-xl p-3">
+                  {editingField && editingField.id === def.id ? (
+                    <div className="flex items-center gap-2">
+                      <Input value={editingField.label} onChange={(e) => setEditingField({ ...editingField, label: e.target.value })} className="rounded-lg h-10 flex-1" />
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 whitespace-nowrap">
+                        <input type="checkbox" checked={editingField.required} onChange={(e) => setEditingField({ ...editingField, required: e.target.checked })} className="w-4 h-4 rounded accent-violet-500" />Required
+                      </label>
+                      <button type="button" onClick={handleSaveFieldEdit} className="p-2 hover:bg-emerald-100 rounded-lg"><Check className="w-4 h-4 text-emerald-600" /></button>
+                      <button type="button" onClick={() => setEditingField(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4 text-slate-500" /></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-bold text-slate-900 truncate">{def.label}</span>
+                        {def.required && <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">Required</span>}
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => setEditingField({ id: def.id, label: def.label, required: def.required })} data-testid={`edit-field-${def.key}`} className="p-2 hover:bg-sky-100 rounded-lg"><Edit className="w-4 h-4 text-sky-600" /></button>
+                        <button type="button" onClick={() => handleDeleteField(def.id)} data-testid={`delete-field-${def.key}`} className="p-2 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4 text-rose-600" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <form onSubmit={handleAddField} className="border-t border-slate-200 pt-4 space-y-3">
+              <Label className="font-bold">Add Field</Label>
+              <div className="flex items-center gap-2">
+                <Input data-testid="new-field-label" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g., Blood Group" className="rounded-xl h-11 flex-1" />
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 whitespace-nowrap">
+                  <input type="checkbox" checked={newFieldRequired} onChange={(e) => setNewFieldRequired(e.target.checked)} className="w-4 h-4 rounded accent-violet-500" />Required
+                </label>
+              </div>
+              <Button data-testid="add-field-btn" type="submit" disabled={!newFieldLabel.trim()} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-bold rounded-xl">
+                <Plus className="w-4 h-4 mr-2" />Add Field
+              </Button>
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

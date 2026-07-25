@@ -33,6 +33,12 @@ export const api = {
   promoteSingleStudentPreview: (id, data) => axios.post(`${API}/students/${id}/promote-preview`, data),
   promoteSingleStudent: (id, data) => axios.post(`${API}/students/${id}/promote`, data),
 
+  // Custom Fields
+  getCustomFields: () => axios.get(`${API}/custom-fields`),
+  createCustomField: (data) => axios.post(`${API}/custom-fields`, data),
+  updateCustomField: (id, data) => axios.put(`${API}/custom-fields/${id}`, data),
+  deleteCustomField: (id) => axios.delete(`${API}/custom-fields/${id}`),
+
   // Attendance
   markAttendance: (data) => axios.post(`${API}/attendance`, data),
   getAttendance: (params) => axios.get(`${API}/attendance`, { params }),

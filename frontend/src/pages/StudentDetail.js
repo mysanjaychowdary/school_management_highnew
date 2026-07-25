@@ -13,6 +13,7 @@ const StudentDetail = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [customFieldDefs, setCustomFieldDefs] = useState([]);
 
   useEffect(() => {
     const load = async () => {
@@ -23,6 +24,7 @@ const StudentDetail = () => {
       finally { setLoading(false); }
     };
     load();
+    api.getCustomFields().then((r) => setCustomFieldDefs(r.data)).catch(() => {});
   }, [id]);
 
   if (loading) return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div></div>;
@@ -57,6 +59,9 @@ const StudentDetail = () => {
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mother</p><p className="font-bold text-slate-900">{student.motherName}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mobile</p><p className="font-bold text-slate-900">{showFullMobile ? student.mobile : maskMobile(student.mobile)}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Address</p><p className="font-bold text-slate-900">{student.address}</p></div>
+          {customFieldDefs.map((def) => (
+            <div key={def.key}><p className="text-xs font-bold uppercase tracking-widest text-slate-400">{def.label}</p><p className="font-bold text-slate-900">{student.customFields?.[def.key] || '—'}</p></div>
+          ))}
         </div>
       </div>
 
