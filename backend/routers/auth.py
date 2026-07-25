@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 SYSTEM_ROLES = [
     {"roleName": "super_admin", "label": "Super Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "roles", "settings", "busTracking", "hallTickets"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": True, "canRevertFees": True, "canApproveConcession": True, "canSeeFullMobile": True, "isSystem": True},
+    {"roleName": "main_admin", "label": "Main Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "roles", "settings", "busTracking", "hallTickets"],
+     "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": True, "canRevertFees": True, "canApproveConcession": True, "canSeeFullMobile": True, "isSystem": True},
     {"roleName": "admin_role", "label": "Admin", "modules": ["dashboard", "classes", "students", "attendance", "fees", "expenses", "inventory", "calendar", "homework", "marks", "staff", "approvals", "complaints", "busTracking", "hallTickets"],
      "canEdit": True, "canDelete": True, "canExport": True, "canEditFees": False, "canRevertFees": True, "canApproveConcession": False, "canSeeFullMobile": True, "isSystem": True},
     {"roleName": "teacher", "label": "Teacher", "modules": ["students", "attendance", "calendar", "homework", "marks", "approvals", "complaints", "hallTickets"],
@@ -148,6 +150,16 @@ async def parent_login(data: LoginRequest):
     if not student:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"success": True, "student": {k: v for k, v in student.items() if k != 'parentPassword'}, "role": "parent"}
+
+@router.post("/auth/impersonate-staff")
+async def impersonate_staff(data: ImpersonateStaffRequest):
+    if data.superAdminUsername != "admin" or data.superAdminPassword != "12345678":
+        raise HTTPException(status_code=401, detail="Invalid super admin credentials")
+    staff = await db.staff.find_one({"id": data.staffId}, {"_id": 0})
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    role_doc = await get_role_by_name(staff['role'])
+    return {"success": True, "user": {k: v for k, v in staff.items() if k != 'password'}, "role": staff['role'], "roleDetails": role_doc}
 
 # ==================== CLASS & SECTION ROUTES ====================
 

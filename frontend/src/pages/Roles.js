@@ -32,6 +32,7 @@ const Roles = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm);
+  const [disabledModules, setDisabledModules] = useState([]);
 
   const load = useCallback(async () => {
     try { setLoading(true); const r = await api.getRoles(); setRoles(r.data); }
@@ -39,6 +40,9 @@ const Roles = () => {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { api.getEnabledModules().then((r) => setDisabledModules(r.data?.disabledModules || [])).catch(() => {}); }, []);
+
+  const selectableModules = AVAILABLE_MODULES.filter((m) => !disabledModules.includes(m.key));
 
   const openCreate = () => { setEditing(null); setForm(blankForm); setShowDialog(true); };
   const openEdit = (role) => {
@@ -160,7 +164,7 @@ const Roles = () => {
                   )}
                 </div>
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-72 overflow-y-auto">
-                  {AVAILABLE_MODULES.map((m) => {
+                  {selectableModules.map((m) => {
                     const checked = form.modules.includes(m.key);
                     const mp = form.modulePerms[m.key] || { create: false, edit: false, delete: false };
                     return (

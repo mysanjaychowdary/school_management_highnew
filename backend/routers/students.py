@@ -240,7 +240,7 @@ async def promote_students_preview(request: PromoteRequest):
             "$or": [
                 {"applicableClass": request.fromClass, "applicableSection": student.get('section', '')},
                 {"applicableClass": request.fromClass, "applicableSection": {"$in": [None, ""]}},
-                {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+                {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
                 {"studentId": student['id']},
             ]
         }, {"_id": 0}).to_list(500)
@@ -295,7 +295,7 @@ async def _calc_promotion(student: Dict):
         "$or": [
             {"applicableClass": from_class, "applicableSection": student.get('section', '')},
             {"applicableClass": from_class, "applicableSection": {"$in": [None, ""]}},
-            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
             {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)

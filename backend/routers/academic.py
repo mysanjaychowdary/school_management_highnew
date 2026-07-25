@@ -96,7 +96,7 @@ async def get_fee_status(studentClass: str, section: str):
         "$or": [
             {"applicableClass": studentClass, "applicableSection": section},
             {"applicableClass": studentClass, "applicableSection": {"$in": [None, ""]}},
-            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
             {"studentId": {"$in": student_ids}},
         ]
     }, {"_id": 0}).to_list(500)

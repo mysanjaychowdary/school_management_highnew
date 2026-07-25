@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search, Bus, Ticket } from 'lucide-react';
+import { GraduationCap, Users, ClipboardCheck, DollarSign, ShoppingCart, Settings, BookOpen, Package, CalendarDays, BookOpenCheck, UserCog, LogOut, Menu, X, ShieldCheck, BarChart3, KeyRound, AlertTriangle, ChevronsLeft, ChevronsRight, Search, Bus, Ticket, Lock, UserCheck } from 'lucide-react';
 import { useAuth, canAccess } from '../lib/AuthContext';
 import { api } from '../lib/api';
+import { toast } from 'sonner';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import '../lib/loader';
 import GlobalLoader from './GlobalLoader';
 
@@ -39,8 +44,11 @@ const COLLAPSED_KEY = 'sidebar-collapsed';
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, perms, logout } = useAuth();
+  const { user, role, perms, logout, impersonating, returnToAdmin, disabledModules } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem(COLLAPSED_KEY);
@@ -50,7 +58,7 @@ const Layout = () => {
   const [branding, setBranding] = useState({ schoolName: 'SchoolPro', logoUrl: '' });
   const [complaintCounts, setComplaintCounts] = useState({ overdue: 0, pending: 0 });
 
-  const isComplaintManager = role === 'super_admin' || role === 'admin_role';
+  const isComplaintManager = role === 'super_admin' || role === 'main_admin' || role === 'admin_role';
 
   // Auto-collapse on small desktop widths (>= 1024 means lg, < 1100 forces collapse)
   useEffect(() => {
@@ -93,11 +101,27 @@ const Layout = () => {
     return () => { active = false; clearInterval(id); };
   }, [isComplaintManager, location.pathname]);
 
-  const navItems = allNavItems.filter((item) => canAccess(perms, item.path));
+  const navItems = allNavItems.filter((item) => canAccess(perms, item.path, disabledModules));
   const isCustomName = branding.schoolName && branding.schoolName !== 'SchoolPro';
   const complaintBadge = (complaintCounts.overdue || 0) + (complaintCounts.pending || 0);
 
   const handleLogout = () => { logout(); navigate('/'); };
+
+  const handleReturnToAdmin = () => { returnToAdmin(); navigate('/'); };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwForm.newPassword !== pwForm.confirmPassword) { toast.error('New passwords do not match'); return; }
+    if (!pwForm.newPassword) { toast.error('Enter a new password'); return; }
+    try {
+      setPwSaving(true);
+      await api.changeStaffPassword(user.id, { currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
+      toast.success('Password updated');
+      setShowChangePassword(false);
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) { toast.error(error.response?.data?.detail || 'Failed to update password'); }
+    finally { setPwSaving(false); }
+  };
 
   const getRoleLabel = () => {
     if (perms?.label) return perms.label;
@@ -130,9 +154,11 @@ const Layout = () => {
     complaintCounts,
     complaintBadge,
     user,
+    role,
     roleLabel: getRoleLabel(),
     onNavClick: () => setSidebarOpen(false),
     onLogout: handleLogout,
+    onChangePassword: () => setShowChangePassword(true),
   };
 
   return (
@@ -189,10 +215,32 @@ const Layout = () => {
 
       {/* ============ Main content ============ */}
       <main className={`w-full ${mainWidth} ${mainOffset} min-w-0 transition-[margin,width] duration-300 ease-in-out`}>
+        {impersonating && (
+          <div data-testid="impersonation-banner" className="bg-amber-400 text-amber-900 px-4 sm:px-6 lg:px-7 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <span className="font-bold text-sm flex items-center gap-2"><UserCheck className="w-4 h-4" />Viewing as {user?.name || user?.username} ({getRoleLabel()})</span>
+            <button onClick={handleReturnToAdmin} data-testid="return-to-admin-btn" className="font-bold text-sm underline hover:no-underline">Return to Admin</button>
+          </div>
+        )}
         <div className="px-4 sm:px-6 lg:px-7 pt-20 lg:pt-8 pb-12">
           <Outlet />
         </div>
       </main>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showChangePassword} onOpenChange={(open) => { setShowChangePassword(open); if (!open) setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="text-2xl font-bold">Change Password</DialogTitle></DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div><Label>Current Password *</Label><Input data-testid="current-password-input" type="password" required value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div><Label>New Password *</Label><Input data-testid="new-password-input" type="password" required value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div><Label>Confirm New Password *</Label><Input data-testid="confirm-password-input" type="password" required value={pwForm.confirmPassword} onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)} className="rounded-xl">Cancel</Button>
+              <Button data-testid="submit-change-password-btn" type="submit" disabled={pwSaving} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl">{pwSaving ? 'Saving...' : 'Update Password'}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -231,7 +279,7 @@ const NavLinkItem = ({ item, collapsed, mobile, pathname, isComplaintManager, co
   );
 };
 
-const NavContent = ({ mobile = false, collapsed, branding, isCustomName, grouped, groupOrder, pathname, isComplaintManager, complaintCounts, complaintBadge, user, roleLabel, onNavClick, onLogout }) => {
+const NavContent = ({ mobile = false, collapsed, branding, isCustomName, grouped, groupOrder, pathname, isComplaintManager, complaintCounts, complaintBadge, user, role, roleLabel, onNavClick, onLogout, onChangePassword }) => {
   const showLabels = !collapsed || mobile;
   return (
     <>
@@ -287,6 +335,12 @@ const NavContent = ({ mobile = false, collapsed, branding, isCustomName, grouped
                 <p className="text-[11px] text-slate-400 font-medium">{roleLabel}</p>
               </div>
             </div>
+            {role !== 'super_admin' && (
+              <button onClick={onChangePassword} data-testid="change-password-btn"
+                className="flex items-center gap-2 w-full px-3 py-2 mb-1 text-slate-300 hover:bg-white/5 hover:text-white rounded-lg font-bold text-sm transition-all">
+                <Lock className="w-4 h-4" />Change Password
+              </button>
+            )}
             <button onClick={onLogout} data-testid="logout-btn"
               className="flex items-center gap-2 w-full px-3 py-2 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 rounded-lg font-bold text-sm transition-all">
               <LogOut className="w-4 h-4" />Logout
@@ -297,6 +351,12 @@ const NavContent = ({ mobile = false, collapsed, branding, isCustomName, grouped
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-md" title={user?.name || user?.username}>
               <span className="text-sm font-extrabold text-white">{(user?.name || user?.username || '?')[0].toUpperCase()}</span>
             </div>
+            {role !== 'super_admin' && (
+              <button onClick={onChangePassword} data-testid="change-password-btn-collapsed" title="Change Password"
+                className="p-2 text-slate-300 hover:bg-white/5 hover:text-white rounded-lg transition-all">
+                <Lock className="w-4 h-4" />
+              </button>
+            )}
             <button onClick={onLogout} data-testid="logout-btn-collapsed" title="Logout"
               className="p-2 text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 rounded-lg transition-all">
               <LogOut className="w-4 h-4" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, FileText, Send, BarChart3, Home, MoreHorizontal, ChevronRight, Bus as BusIcon } from 'lucide-react';
+import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, FileText, Send, BarChart3, Home, MoreHorizontal, ChevronRight, Bus as BusIcon, Lock } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Toaster } from '../components/ui/sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import GlobalLoader from '../components/GlobalLoader';
 
 const ParentPortal = () => {
@@ -23,6 +24,9 @@ const ParentPortal = () => {
   const [branding, setBranding] = useState({ schoolName: 'Parent Portal', logoUrl: '' });
   const [buses, setBuses] = useState([]);
   const [busLoading, setBusLoading] = useState(true);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     api.getSchoolSettings()
@@ -66,6 +70,20 @@ const ParentPortal = () => {
   };
 
   const handleLogout = () => { setLoggedIn(false); setDashData(null); setUsername(''); setPassword(''); setActiveTab('overview'); setLeaveRequests([]); };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwForm.newPassword !== pwForm.confirmPassword) { toast.error('New passwords do not match'); return; }
+    if (!pwForm.newPassword) { toast.error('Enter a new password'); return; }
+    try {
+      setPwSaving(true);
+      await api.changeParentPassword(dashData.student.id, { currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
+      toast.success('Password updated');
+      setShowChangePassword(false);
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) { toast.error(error.response?.data?.detail || 'Failed to update password'); }
+    finally { setPwSaving(false); }
+  };
   const getStatusColor = (s) => s === 'present' ? 'bg-emerald-100 text-emerald-700' : s === 'absent' ? 'bg-rose-100 text-rose-700' : s === 'holiday' ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-600';
   const busTimeAgo = (iso) => {
     if (!iso) return null;
@@ -184,9 +202,14 @@ const ParentPortal = () => {
               )}
               <p className="text-sm font-bold truncate" data-testid="parent-school-name">{branding.schoolName}</p>
             </div>
-            <button data-testid="parent-logout-btn" onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-xs font-bold transition-colors backdrop-blur-sm">
-              <LogOut className="w-3.5 h-3.5" />Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <button data-testid="parent-change-password-btn" onClick={() => setShowChangePassword(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-xs font-bold transition-colors backdrop-blur-sm">
+                <Lock className="w-3.5 h-3.5" />Change Password
+              </button>
+              <button data-testid="parent-logout-btn" onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-xs font-bold transition-colors backdrop-blur-sm">
+                <LogOut className="w-3.5 h-3.5" />Logout
+              </button>
+            </div>
           </div>
 
           {/* Student hero card */}
@@ -749,6 +772,22 @@ const ParentPortal = () => {
           </div>
         </div>
       )}
+
+      {/* Change Password Dialog */}
+      <Dialog open={showChangePassword} onOpenChange={(open) => { setShowChangePassword(open); if (!open) setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="text-2xl font-bold">Change Password</DialogTitle></DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div><Label>Current Password *</Label><Input data-testid="parent-current-password-input" type="password" required value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div><Label>New Password *</Label><Input data-testid="parent-new-password-input" type="password" required value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div><Label>Confirm New Password *</Label><Input data-testid="parent-confirm-password-input" type="password" required value={pwForm.confirmPassword} onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })} className="rounded-xl h-12" /></div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)} className="rounded-xl">Cancel</Button>
+              <Button data-testid="parent-submit-change-password-btn" type="submit" disabled={pwSaving} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl">{pwSaving ? 'Saving...' : 'Update Password'}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

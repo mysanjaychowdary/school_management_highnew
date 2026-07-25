@@ -99,6 +99,17 @@ async def update_school_settings(data: SchoolSettings):
     await db.settings.update_one({"type": "school"}, {"$set": {"schoolName": data.schoolName, "schoolAddress": data.schoolAddress, "logoUrl": data.logoUrl or ""}}, upsert=True)
     return {"message": "School settings updated"}
 
+@router.get("/settings/enabled-modules")
+async def get_enabled_modules():
+    settings = await db.settings.find_one({"type": "enabled_modules"}, {"_id": 0})
+    if not settings: return {"disabledModules": []}
+    return settings
+
+@router.put("/settings/enabled-modules")
+async def update_enabled_modules(data: EnabledModulesSettings):
+    await db.settings.update_one({"type": "enabled_modules"}, {"$set": {"disabledModules": data.disabledModules}}, upsert=True)
+    return {"message": "Feature toggles updated"}
+
 @router.get("/settings/whatsapp-templates")
 async def get_whatsapp_templates():
     empty = {"name": "", "componentsJson": "", "enabled": True}
@@ -283,6 +294,15 @@ async def delete_staff(staff_id: str):
     if result.deleted_count == 0: raise HTTPException(status_code=404, detail="Staff not found")
     return {"message": "Staff deleted"}
 
+@router.put("/staff/{staff_id}/change-password")
+async def change_staff_password(staff_id: str, data: ChangePasswordRequest):
+    staff = await db.staff.find_one({"id": staff_id}, {"_id": 0})
+    if not staff: raise HTTPException(status_code=404, detail="Staff not found")
+    if staff.get('password') != data.currentPassword:
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    await db.staff.update_one({"id": staff_id}, {"$set": {"password": data.newPassword}})
+    return {"message": "Password updated"}
+
 # ==================== STUDENT DETAIL ====================
 
 @router.get("/students/{student_id}/detail")
@@ -298,7 +318,7 @@ async def get_student_detail(student_id: str):
         "$or": [
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
-            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
             {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)
@@ -320,6 +340,15 @@ async def get_student_detail(student_id: str):
 
 # ==================== PARENT PORTAL ====================
 
+@router.put("/parent/{student_id}/change-password")
+async def change_parent_password(student_id: str, data: ChangePasswordRequest):
+    student = await db.students.find_one({"id": student_id}, {"_id": 0})
+    if not student: raise HTTPException(status_code=404, detail="Student not found")
+    if student.get('parentPassword') != data.currentPassword:
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    await db.students.update_one({"id": student_id}, {"$set": {"parentPassword": data.newPassword}})
+    return {"message": "Password updated"}
+
 @router.get("/parent/dashboard/{student_id}")
 async def parent_dashboard(student_id: str):
     student = await db.students.find_one({"id": student_id}, {"_id": 0})
@@ -340,7 +369,7 @@ async def parent_dashboard(student_id: str):
         "$or": [
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
-            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
             {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, canEdit } from '../lib/AuthContext';
-import { Plus, Edit, Trash2, UserCog } from 'lucide-react';
+import { Plus, Edit, Trash2, UserCog, LogIn } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
@@ -11,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 
 const StaffPage = () => {
-  const { role, perms } = useAuth();
+  const { user, role, perms, impersonateStaff } = useAuth();
+  const navigate = useNavigate();
   const showEdit = canEdit(perms, 'staff');
   const [staff, setStaff] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -19,6 +21,9 @@ const StaffPage = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [form, setForm] = useState({ name: '', role: 'teacher', mobile: '', subject: '', joiningDate: '', username: '', password: '' });
+  const [impersonateTarget, setImpersonateTarget] = useState(null);
+  const [impersonatePassword, setImpersonatePassword] = useState('');
+  const [impersonateLoading, setImpersonateLoading] = useState(false);
 
   const loadStaff = useCallback(async () => {
     try { const r = await api.getStaff(); setStaff(r.data); } catch (e) { toast.error('Failed to load staff'); }
@@ -58,6 +63,19 @@ const StaffPage = () => {
     if (!window.confirm('Delete this staff member?')) return;
     try { await api.deleteStaff(id); toast.success('Staff deleted'); loadStaff(); }
     catch (error) { toast.error('Failed to delete'); }
+  };
+
+  const handleImpersonate = async (e) => {
+    e.preventDefault();
+    if (!impersonateTarget) return;
+    try {
+      setImpersonateLoading(true);
+      const r = await api.impersonateStaff({ superAdminUsername: user.username, superAdminPassword: impersonatePassword, staffId: impersonateTarget.id });
+      impersonateStaff(r.data.user, r.data.role, r.data.roleDetails);
+      setImpersonateTarget(null); setImpersonatePassword('');
+      navigate('/');
+    } catch (error) { toast.error(error.response?.data?.detail || 'Failed to log in as staff'); }
+    finally { setImpersonateLoading(false); }
   };
 
   return (
@@ -118,6 +136,9 @@ const StaffPage = () => {
                     <TableCell className="font-medium text-slate-700">{s.username}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        {role === 'super_admin' && (
+                          <button onClick={() => setImpersonateTarget(s)} data-testid={`login-as-staff-${s.id}`} title="Login as this staff member" className="p-2 hover:bg-emerald-100 rounded-lg transition-colors"><LogIn className="w-4 h-4 text-emerald-600" /></button>
+                        )}
                         {showEdit && <>
                           <button onClick={() => openEdit(s)} data-testid={`edit-staff-${s.id}`} className="p-2 hover:bg-sky-100 rounded-lg transition-colors"><Edit className="w-4 h-4 text-sky-600" /></button>
                           <button onClick={() => handleDelete(s.id)} data-testid={`delete-staff-${s.id}`} className="p-2 hover:bg-rose-100 rounded-lg transition-colors"><Trash2 className="w-4 h-4 text-rose-600" /></button>
@@ -130,6 +151,21 @@ const StaffPage = () => {
             </Table>
           </div>}
       </div>
+
+      {/* Login as staff confirm dialog */}
+      <Dialog open={!!impersonateTarget} onOpenChange={(open) => { if (!open) { setImpersonateTarget(null); setImpersonatePassword(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="text-xl font-bold">Login as {impersonateTarget?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleImpersonate} className="space-y-4">
+            <p className="text-sm text-slate-600">Confirm your super admin password to continue.</p>
+            <div><Label>Your Password *</Label><Input data-testid="impersonate-password-input" type="password" required autoFocus value={impersonatePassword} onChange={(e) => setImpersonatePassword(e.target.value)} className="rounded-xl h-12" /></div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => { setImpersonateTarget(null); setImpersonatePassword(''); }} className="rounded-xl">Cancel</Button>
+              <Button data-testid="confirm-impersonate-btn" type="submit" disabled={impersonateLoading} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl">{impersonateLoading ? 'Logging in...' : 'Confirm'}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

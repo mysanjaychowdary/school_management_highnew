@@ -59,6 +59,8 @@ export const api = {
   getWhatsAppSettings: () => axios.get(`${API}/settings/whatsapp`),
   updateWhatsAppSettings: (data) => axios.put(`${API}/settings/whatsapp`, data),
   getSchoolSettings: () => axios.get(`${API}/settings/school`),
+  getEnabledModules: () => axios.get(`${API}/settings/enabled-modules`),
+  updateEnabledModules: (data) => axios.put(`${API}/settings/enabled-modules`, data),
   updateSchoolSettings: (data) => axios.put(`${API}/settings/school`, data),
   getWhatsAppTemplates: () => axios.get(`${API}/settings/whatsapp-templates`),
   updateWhatsAppTemplates: (data) => axios.put(`${API}/settings/whatsapp-templates`, data),
@@ -116,6 +118,9 @@ export const api = {
   login: (data) => axios.post(`${API}/auth/login`, data),
   staffLogin: (data) => axios.post(`${API}/auth/staff-login`, data),
   parentLogin: (data) => axios.post(`${API}/auth/parent-login`, data),
+  impersonateStaff: (data) => axios.post(`${API}/auth/impersonate-staff`, data),
+  changeStaffPassword: (id, data) => axios.put(`${API}/staff/${id}/change-password`, data),
+  changeParentPassword: (studentId, data) => axios.put(`${API}/parent/${studentId}/change-password`, data),
 
   // Parent Portal
   getParentDashboard: (studentId) => axios.get(`${API}/parent/dashboard/${studentId}`),

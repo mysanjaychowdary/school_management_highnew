@@ -226,6 +226,9 @@ class SchoolSettings(BaseModel):
     schoolAddress: str
     logoUrl: Optional[str] = None
 
+class EnabledModulesSettings(BaseModel):
+    disabledModules: List[str] = []
+
 class PromoteRequest(BaseModel):
     fromClass: str
     toClass: str
@@ -342,6 +345,15 @@ class StaffUpdate(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+class ImpersonateStaffRequest(BaseModel):
+    superAdminUsername: str
+    superAdminPassword: str
+    staffId: str
 
 class Concession(BaseModel):
     model_config = ConfigDict(extra="ignore")

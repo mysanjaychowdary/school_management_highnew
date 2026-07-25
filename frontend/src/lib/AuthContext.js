@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { api } from './api';
 
 const AuthContext = createContext();
 
@@ -45,6 +46,16 @@ export const AuthProvider = ({ children }) => {
   const [role, setRole] = useState(null);
   const [perms, setPerms] = useState(DEFAULT_PERMS);
   const [loaded, setLoaded] = useState(false);
+  const [impersonating, setImpersonating] = useState(false);
+  const [adminSession, setAdminSession] = useState(null);
+  const [disabledModules, setDisabledModules] = useState([]);
+
+  const refreshDisabledModules = useCallback(async () => {
+    try {
+      const r = await api.getEnabledModules();
+      setDisabledModules(r.data?.disabledModules || []);
+    } catch (e) { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem('schoolpro_auth');
@@ -54,24 +65,47 @@ export const AuthProvider = ({ children }) => {
         setUser(d.user);
         setRole(d.role);
         setPerms(d.perms || DEFAULT_PERMS);
+        setImpersonating(!!d.impersonating);
+        setAdminSession(d.adminSession || null);
       } catch (e) { /* ignore */ }
     }
-    setLoaded(true);
-  }, []);
+    refreshDisabledModules().finally(() => setLoaded(true));
+  }, [refreshDisabledModules]);
+
+  const persist = (userData, roleName, p, impersonatingFlag, adminSessionData) => {
+    localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: roleName, perms: p, impersonating: impersonatingFlag, adminSession: adminSessionData }));
+  };
 
   const login = (userData, roleName, roleDetails) => {
     const p = roleDetails ? { ...DEFAULT_PERMS, ...roleDetails } : DEFAULT_PERMS;
-    setUser(userData); setRole(roleName); setPerms(p);
-    localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: roleName, perms: p }));
+    setUser(userData); setRole(roleName); setPerms(p); setImpersonating(false); setAdminSession(null);
+    persist(userData, roleName, p, false, null);
+    refreshDisabledModules();
   };
 
   const logout = () => {
-    setUser(null); setRole(null); setPerms(DEFAULT_PERMS);
+    setUser(null); setRole(null); setPerms(DEFAULT_PERMS); setImpersonating(false); setAdminSession(null);
     localStorage.removeItem('schoolpro_auth');
   };
 
+  const impersonateStaff = (userData, roleName, roleDetails) => {
+    const p = roleDetails ? { ...DEFAULT_PERMS, ...roleDetails } : DEFAULT_PERMS;
+    const snapshot = impersonating ? adminSession : { user, role, perms };
+    setAdminSession(snapshot); setImpersonating(true);
+    setUser(userData); setRole(roleName); setPerms(p);
+    persist(userData, roleName, p, true, snapshot);
+    refreshDisabledModules();
+  };
+
+  const returnToAdmin = () => {
+    if (!adminSession) return;
+    setUser(adminSession.user); setRole(adminSession.role); setPerms(adminSession.perms);
+    setImpersonating(false); setAdminSession(null);
+    persist(adminSession.user, adminSession.role, adminSession.perms, false, null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, role, perms, login, logout, loaded }}>
+    <AuthContext.Provider value={{ user, role, perms, login, logout, loaded, impersonating, adminSession, impersonateStaff, returnToAdmin, disabledModules, refreshDisabledModules }}>
       {children}
     </AuthContext.Provider>
   );
@@ -82,11 +116,11 @@ export const useAuth = () => useContext(AuthContext);
 // ----- Access helpers -----
 
 // Permission helpers (read from auth perms loaded at login)
-export const canAccess = (perms, path) => {
+export const canAccess = (perms, path, disabledModules = []) => {
   if (!perms) return false;
   const mod = PATH_TO_MODULE[path];
   if (!mod) return false;
-  return (perms.modules || []).includes(mod);
+  return (perms.modules || []).includes(mod) && !disabledModules.includes(mod);
 };
 
 export const getNavItems = (perms) => (perms?.modules || []);

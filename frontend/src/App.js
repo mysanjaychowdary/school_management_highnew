@@ -41,8 +41,8 @@ const getDefaultRoute = (perms) => {
 };
 
 const ProtectedRoute = ({ path, children }) => {
-  const { perms } = useAuth();
-  if (!canAccess(perms, path)) return <Navigate to={getDefaultRoute(perms)} replace />;
+  const { perms, disabledModules } = useAuth();
+  if (!canAccess(perms, path, disabledModules)) return <Navigate to={getDefaultRoute(perms)} replace />;
   return children;
 };
 

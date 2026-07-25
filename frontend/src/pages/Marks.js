@@ -485,7 +485,7 @@ const Marks = () => {
                       <Printer className="w-4 h-4 mr-2" />Print Result
                     </a>
                   )}
-                  {viewExam && role === 'super_admin' && (
+                  {viewExam && (role === 'super_admin' || role === 'main_admin') && (
                     <Button data-testid="marks-send-results-btn" onClick={handleSendResults} disabled={sendingResults} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl">
                       {sendingResults ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</> : <><Send className="w-4 h-4 mr-2" />Send Results to Parents</>}
                     </Button>

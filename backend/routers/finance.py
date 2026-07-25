@@ -70,7 +70,7 @@ async def get_student_fees(student_code: str):
         "$or": [
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
-            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}, "studentId": {"$in": [None, ""]}},
             {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)

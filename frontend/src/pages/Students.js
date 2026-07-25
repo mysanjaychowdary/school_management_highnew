@@ -374,7 +374,7 @@ const Students = () => {
 
           {showExport && <Button data-testid="download-sample-csv" onClick={handleDownloadSample} variant="outline" className="font-bold rounded-xl"><Download className="w-5 h-5 mr-2" />Sample CSV</Button>}
 
-          {role === 'super_admin' && (
+          {(role === 'super_admin' || role === 'main_admin') && (
             <Button data-testid="manage-fields-btn" onClick={() => setShowFieldsDialog(true)} variant="outline" className="font-bold rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 border-violet-200">
               <SettingsIcon className="w-5 h-5 mr-2" />Manage Fields
             </Button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Save, MessageSquare, GraduationCap, FileCode2, Smartphone, Radio } from 'lucide-react';
+import { Save, MessageSquare, GraduationCap, FileCode2, Smartphone, Radio, SlidersHorizontal } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth, AVAILABLE_MODULES } from '../lib/AuthContext';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,6 +9,8 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+
+const PROTECTED_MODULES = ['dashboard', 'settings', 'roles'];
 
 const EVENT_DEFS = [
   {
@@ -93,12 +96,15 @@ const CHANNEL_OPTIONS = [
 const EMPTY_SMS_TPL = { message: '', tpid: '', enabled: true };
 
 const Settings = () => {
+  const { role, refreshDisabledModules } = useAuth();
   const [loading, setLoading] = useState(true);
   const [savingWA, setSavingWA] = useState(false);
   const [savingSMS, setSavingSMS] = useState(false);
   const [savingSchool, setSavingSchool] = useState(false);
   const [savingTpl, setSavingTpl] = useState(false);
   const [savingChannel, setSavingChannel] = useState(false);
+  const [savingModules, setSavingModules] = useState(false);
+  const [disabledModules, setDisabledModules] = useState([]);
   const [wa, setWa] = useState({ phoneNumberId: '', accessToken: '' });
   const [sms, setSms] = useState({ userid: '', password: '', sender: '', peid: '' });
   const [channel, setChannel] = useState('whatsapp');
@@ -122,13 +128,14 @@ const Settings = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const [waR, smsR, schR, tplR, smsTplR, chR] = await Promise.all([
+      const [waR, smsR, schR, tplR, smsTplR, chR, modR] = await Promise.all([
         api.getWhatsAppSettings(),
         api.getSMSSettings(),
         api.getSchoolSettings(),
         api.getWhatsAppTemplates(),
         api.getSMSTemplates(),
         api.getNotificationChannel(),
+        api.getEnabledModules(),
       ]);
       setWa(waR.data);
       setSms(smsR.data);
@@ -147,8 +154,22 @@ const Settings = () => {
         fee_reminder: { ...EMPTY_SMS_TPL, ...(smsTplR.data.fee_reminder || {}) },
       });
       setChannel(chR.data.channel || 'whatsapp');
+      setDisabledModules(modR.data?.disabledModules || []);
     } catch (e) { toast.error('Failed to load settings'); }
     finally { setLoading(false); }
+  };
+
+  const toggleModuleEnabled = (key) => {
+    setDisabledModules((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]);
+  };
+
+  const handleSaveModules = async () => {
+    try {
+      setSavingModules(true);
+      await api.updateEnabledModules({ disabledModules });
+      toast.success('Feature toggles saved');
+      refreshDisabledModules();
+    } catch (e) { toast.error('Failed'); } finally { setSavingModules(false); }
   };
 
   const handleSaveWA = async (e) => {
@@ -256,6 +277,9 @@ const Settings = () => {
           <TabsTrigger value="whatsapp" data-testid="tab-whatsapp" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><MessageSquare className="w-4 h-4 mr-2" />WhatsApp</TabsTrigger>
           <TabsTrigger value="sms" data-testid="tab-sms" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><Smartphone className="w-4 h-4 mr-2" />SMS</TabsTrigger>
           <TabsTrigger value="templates" data-testid="tab-templates" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><FileCode2 className="w-4 h-4 mr-2" />Templates</TabsTrigger>
+          {role === 'super_admin' && (
+            <TabsTrigger value="features" data-testid="tab-features" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 sm:px-6 py-2 font-bold text-sm"><SlidersHorizontal className="w-4 h-4 mr-2" />Features</TabsTrigger>
+          )}
         </TabsList>
 
         {/* School Settings */}
@@ -471,6 +495,37 @@ const Settings = () => {
             </form>
           </div>
         </TabsContent>
+
+        {/* Feature Toggles (super admin only) */}
+        {role === 'super_admin' && (
+          <TabsContent value="features">
+            <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-rose-400 to-rose-600 rounded-xl flex items-center justify-center"><SlidersHorizontal className="w-6 h-6 text-white" /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Feature Toggles</h2>
+                  <p className="text-sm text-slate-600">Turn a feature off to hide it everywhere — nav, direct links, and the Roles permission picker — for every user including Main Admin.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {AVAILABLE_MODULES.filter((m) => !PROTECTED_MODULES.includes(m.key)).map((m) => {
+                  const enabled = !disabledModules.includes(m.key);
+                  return (
+                    <div key={m.key} data-testid={`module-toggle-row-${m.key}`} className="flex items-center justify-between p-3 border border-slate-200 rounded-xl">
+                      <span className="font-bold text-slate-800 text-sm">{m.label}</span>
+                      <Switch data-testid={`module-toggle-switch-${m.key}`} checked={enabled} onCheckedChange={() => toggleModuleEnabled(m.key)} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end mt-6">
+                <Button data-testid="save-features-btn" onClick={handleSaveModules} disabled={savingModules} className="bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl px-8 active:scale-95 transition-transform">
+                  <Save className="w-5 h-5 mr-2" />{savingModules ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        )}
 
       </Tabs>
     </div>
