@@ -14,6 +14,7 @@ from openpyxl import Workbook
 from db import db
 from models import *
 from services.whatsapp import *
+from services.sms import *
 from services.pdf import *
 
 router = APIRouter()
@@ -137,6 +138,60 @@ async def update_whatsapp_templates(data: WhatsAppTemplates):
         upsert=True
     )
     return {"message": "WhatsApp templates updated"}
+
+@router.get("/settings/sms")
+async def get_sms_settings_route():
+    settings = await db.settings.find_one({"type": "sms"}, {"_id": 0})
+    if not settings: return {"userid": "", "password": "", "sender": "", "peid": ""}
+    return settings
+
+@router.put("/settings/sms")
+async def update_sms_settings(settings: SMSSettings):
+    await db.settings.update_one({"type": "sms"}, {"$set": {"userid": settings.userid, "password": settings.password, "sender": settings.sender, "peid": settings.peid}}, upsert=True)
+    return {"message": "Settings updated"}
+
+@router.get("/settings/sms-templates")
+async def get_sms_templates():
+    empty = {"message": "", "tpid": "", "enabled": True}
+    doc = await db.settings.find_one({"type": "sms_templates"}, {"_id": 0})
+    if not doc:
+        return {"absent": empty, "fee_paid": empty, "event": empty, "marks": empty, "fee_reminder": empty}
+    def _norm(entry):
+        if not entry:
+            return empty
+        return {"message": entry.get("message", ""), "tpid": entry.get("tpid", ""), "enabled": entry.get("enabled", True) if entry.get("enabled") is not None else True}
+    return {
+        "absent": _norm(doc.get("absent")),
+        "fee_paid": _norm(doc.get("fee_paid")),
+        "event": _norm(doc.get("event")),
+        "marks": _norm(doc.get("marks")),
+        "fee_reminder": _norm(doc.get("fee_reminder")),
+    }
+
+@router.put("/settings/sms-templates")
+async def update_sms_templates(data: SMSTemplates):
+    await db.settings.update_one(
+        {"type": "sms_templates"},
+        {"$set": {
+            "absent": data.absent.model_dump(),
+            "fee_paid": data.fee_paid.model_dump(),
+            "event": data.event.model_dump(),
+            "marks": data.marks.model_dump(),
+            "fee_reminder": data.fee_reminder.model_dump(),
+        }},
+        upsert=True
+    )
+    return {"message": "SMS templates updated"}
+
+@router.get("/settings/notification-channel")
+async def get_notification_channel():
+    doc = await db.settings.find_one({"type": "notification_channel"}, {"_id": 0})
+    return {"channel": (doc or {}).get("channel", "whatsapp")}
+
+@router.put("/settings/notification-channel")
+async def update_notification_channel(data: NotificationChannelSettings):
+    await db.settings.update_one({"type": "notification_channel"}, {"$set": {"channel": data.channel}}, upsert=True)
+    return {"message": "Notification channel updated"}
 
 # ==================== FILE UPLOAD ====================
 

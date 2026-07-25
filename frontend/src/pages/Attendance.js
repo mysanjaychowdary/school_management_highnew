@@ -264,7 +264,7 @@ const Attendance = () => {
                       <span className="inline-flex items-center gap-1.5 mt-2 mr-3 text-emerald-700 font-semibold">{presentCount} Present</span>
                       <span className="inline-flex items-center gap-1.5 mr-3 text-rose-700 font-semibold">{absentCount} Absent</span>
                       <span className="inline-flex items-center gap-1.5 text-orange-700 font-semibold">{holidayCount} Holiday</span>
-                      {absentCount > 0 && <><br /><span className="text-amber-700 font-medium mt-1 inline-block">WhatsApp alerts will be sent to parents of {absentCount} absent student{absentCount > 1 ? 's' : ''}.</span></>}
+                      {absentCount > 0 && <><br /><span className="text-amber-700 font-medium mt-1 inline-block">Alerts will be sent to parents of {absentCount} absent student{absentCount > 1 ? 's' : ''}.</span></>}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

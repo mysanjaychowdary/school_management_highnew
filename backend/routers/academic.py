@@ -13,6 +13,7 @@ from openpyxl import Workbook
 from db import db
 from models import *
 from services.whatsapp import *
+from services.sms import *
 from services.pdf import *
 
 router = APIRouter()
@@ -68,12 +69,21 @@ async def export_attendance(studentClass: str, section: str, startDate: str, end
 @router.post("/attendance/send-alerts")
 async def send_attendance_alerts(data: Dict):
     absent_records = data.get('absentRecords', [])
-    settings_doc = await get_wa_settings()
+    channel = await get_channel()
+    wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
+    sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
     sent_count = 0
     for record in absent_records:
         class_name = f"{record.get('studentClass', '')}-{record.get('section', '')}"
-        result = await send_absent_message(record.get('mobile', ''), record['studentName'], class_name, record['date'], settings_doc)
-        if result.get('success'): sent_count += 1
+        mobile = record.get('mobile', '')
+        ok = False
+        if channel in ("whatsapp", "both") and wa_settings:
+            result = await send_absent_message(mobile, record['studentName'], class_name, record['date'], wa_settings)
+            ok = ok or result.get('success')
+        if channel in ("sms", "both"):
+            result = await send_sms_absent(mobile, record['studentName'], class_name, record['date'], sms_settings)
+            ok = ok or result.get('success')
+        if ok: sent_count += 1
     return {"message": f"Alerts sent to {sent_count} parents"}
 
 @router.get("/fees/status")
@@ -320,11 +330,13 @@ async def send_exam_notifications(payload: Dict):
         entry = by_student.setdefault(sid, {"marks": [], "studentClass": m.get('studentClass', ''), "section": m.get('section', ''), "studentName": m.get('studentName', ''), "studentCode": m.get('studentCode', '')})
         entry["marks"].append(m)
 
-    # Load WhatsApp settings once
-    wa_settings = await get_wa_settings()
-    if not wa_settings:
+    # Load settings for whichever channel(s) are active
+    channel = await get_channel()
+    wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
+    if channel in ("whatsapp", "both") and not wa_settings:
         return {"sent": 0, "skipped": 0, "failed": len(by_student), "disabled": False,
                 "message": "WhatsApp is not configured. Please set Phone Number ID and Access Token in Settings."}
+    sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
 
     sent = 0
     skipped = 0
@@ -348,25 +360,33 @@ async def send_exam_notifications(payload: Dict):
             parts.append(f"{m.get('subject', '')}: {m.get('marks', 0)}/{m.get('maxMarks', 100)}")
         marks_summary = ", ".join(parts)
 
-        result = await send_marks_message(
-            mobile=mobile,
-            student_name=student_name,
-            exam_name=exam_name,
-            class_name=entry.get('studentClass', ''),
-            section=entry.get('section', ''),
-            marks_summary=marks_summary,
-            settings=wa_settings,
-        )
-        if result.get('skipped'):
-            disabled_flag = True
-            skipped += 1
-            details.append({"studentId": sid, "studentName": student_name, "status": "disabled", "reason": result.get('message')})
-        elif result.get('success'):
+        results = []
+        if channel in ("whatsapp", "both"):
+            results.append(await send_marks_message(
+                mobile=mobile,
+                student_name=student_name,
+                exam_name=exam_name,
+                class_name=entry.get('studentClass', ''),
+                section=entry.get('section', ''),
+                marks_summary=marks_summary,
+                settings=wa_settings,
+            ))
+        if channel in ("sms", "both"):
+            results.append(await send_sms_marks(
+                mobile, student_name, exam_name, entry.get('studentClass', ''), entry.get('section', ''), marks_summary, sms_settings,
+            ))
+
+        if any(r.get('success') for r in results):
             sent += 1
             details.append({"studentId": sid, "studentName": student_name, "status": "sent"})
+        elif results and all(r.get('skipped') for r in results):
+            disabled_flag = True
+            skipped += 1
+            details.append({"studentId": sid, "studentName": student_name, "status": "disabled", "reason": results[0].get('message')})
         else:
             failed += 1
-            details.append({"studentId": sid, "studentName": student_name, "status": "failed", "reason": result.get('message', 'unknown')})
+            reason = "; ".join(r.get('message', 'unknown') for r in results) or 'unknown'
+            details.append({"studentId": sid, "studentName": student_name, "status": "failed", "reason": reason})
 
     return {"sent": sent, "skipped": skipped, "failed": failed, "disabled": disabled_flag, "totalStudents": len(by_student), "details": details}
 
@@ -572,14 +592,19 @@ async def create_event(event: EventCreate):
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.events.insert_one(doc)
-    # Send WhatsApp notification to all students if enabled
+    # Send notification to all students if enabled
     if event.sendNotification:
-        settings_doc = await get_wa_settings()
-        if settings_doc:
+        channel = await get_channel()
+        wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
+        sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
+        if wa_settings or sms_settings:
             students = await db.students.find({}, {"_id": 0, "mobile": 1}).to_list(10000)
             for student in students:
                 if student.get('mobile'):
-                    await send_event_message(student['mobile'], event.title, event.date, settings_doc)
+                    if channel in ("whatsapp", "both") and wa_settings:
+                        await send_event_message(student['mobile'], event.title, event.date, wa_settings)
+                    if channel in ("sms", "both"):
+                        await send_sms_event(student['mobile'], event.title, event.date, sms_settings)
     return obj
 
 @router.get("/events")

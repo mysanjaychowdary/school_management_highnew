@@ -1,6 +1,6 @@
 """All Pydantic models for SchoolPro API."""
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
 from datetime import datetime, timezone
 import uuid
 
@@ -168,6 +168,27 @@ class WhatsAppTemplates(BaseModel):
     fee_paid: WhatsAppTemplate = WhatsAppTemplate()
     event: WhatsAppTemplate = WhatsAppTemplate()
     marks: WhatsAppTemplate = WhatsAppTemplate()
+
+class SMSSettings(BaseModel):
+    userid: str
+    password: str
+    sender: str
+    peid: str
+
+class SMSTemplate(BaseModel):
+    message: str = ""  # raw text, may contain {{placeholders}}
+    tpid: str = ""
+    enabled: bool = True
+
+class SMSTemplates(BaseModel):
+    absent: SMSTemplate = SMSTemplate()
+    fee_paid: SMSTemplate = SMSTemplate()
+    event: SMSTemplate = SMSTemplate()
+    marks: SMSTemplate = SMSTemplate()
+    fee_reminder: SMSTemplate = SMSTemplate()
+
+class NotificationChannelSettings(BaseModel):
+    channel: Literal["sms", "whatsapp", "both"] = "whatsapp"
 
 class SchoolSettings(BaseModel):
     schoolName: str

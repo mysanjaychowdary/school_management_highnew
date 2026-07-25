@@ -122,7 +122,7 @@ const Fees = () => {
       else { payload.feeTypeId = selectedFee.id; payload.feeName = selectedFee.label; }
 
       await api.createFeePayment(payload);
-      toast.success('Payment recorded. Receipt sent via WhatsApp');
+      toast.success('Payment recorded. Receipt sent');
       setUpiScreenshot(null); setPaymentMode('cash'); setSelectedFee(null); setCustomPayAmount('');
       handleSearchStudent();
     } catch (error) { toast.error('Failed to record payment'); }

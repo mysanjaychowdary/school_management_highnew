@@ -82,7 +82,7 @@ const EventCalendar = () => {
                 <div><Label>Description *</Label><textarea required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border border-slate-200 rounded-xl p-3 min-h-[100px] focus:ring-2 focus:ring-sky-500 focus:border-sky-500" placeholder="Event details..." /></div>
                 <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                   <input type="checkbox" id="sendNotif" checked={form.sendNotification} onChange={(e) => setForm({ ...form, sendNotification: e.target.checked })} className="w-5 h-5 rounded accent-amber-500" />
-                  <label htmlFor="sendNotif" className="font-bold text-amber-800 cursor-pointer">Send WhatsApp notification to all parents</label>
+                  <label htmlFor="sendNotif" className="font-bold text-amber-800 cursor-pointer">Send notification to all parents</label>
                 </div>
                 <div>
                   <Label>Attachment (Optional - PDF/Image)</Label>

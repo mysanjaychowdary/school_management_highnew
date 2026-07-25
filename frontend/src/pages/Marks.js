@@ -151,7 +151,7 @@ const Marks = () => {
     if (viewClass) scope.push(`Class ${viewClass}`);
     if (viewSection) scope.push(`Section ${viewSection}`);
     scope.push(`Exam ${viewExam}`);
-    if (!window.confirm(`Send WhatsApp results to parents for: ${scope.join(' / ')}?`)) return;
+    if (!window.confirm(`Send results to parents for: ${scope.join(' / ')}?`)) return;
     try {
       setSendingResults(true);
       const payload = { examName: viewExam };

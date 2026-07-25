@@ -57,6 +57,16 @@ export const api = {
   getWhatsAppTemplates: () => axios.get(`${API}/settings/whatsapp-templates`),
   updateWhatsAppTemplates: (data) => axios.put(`${API}/settings/whatsapp-templates`, data),
 
+  // SMS
+  getSMSSettings: () => axios.get(`${API}/settings/sms`),
+  updateSMSSettings: (data) => axios.put(`${API}/settings/sms`, data),
+  getSMSTemplates: () => axios.get(`${API}/settings/sms-templates`),
+  updateSMSTemplates: (data) => axios.put(`${API}/settings/sms-templates`, data),
+
+  // Notification Channel
+  getNotificationChannel: () => axios.get(`${API}/settings/notification-channel`),
+  updateNotificationChannel: (data) => axios.put(`${API}/settings/notification-channel`, data),
+
   // Upload
   uploadFile: (file) => {
     const formData = new FormData();

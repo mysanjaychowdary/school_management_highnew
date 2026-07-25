@@ -14,6 +14,7 @@ from openpyxl import Workbook
 from db import db
 from models import *
 from services.whatsapp import *
+from services.sms import *
 from services.pdf import *
 
 router = APIRouter()
@@ -93,14 +94,20 @@ async def create_fee_payment(payment: FeePaymentCreate):
     doc = payment_obj.model_dump()
     doc['paymentDate'] = doc['paymentDate'].isoformat()
     await db.fee_payments.insert_one(doc)
-    settings_doc = await get_wa_settings()
+    channel = await get_channel()
+    wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
+    sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
     student = await db.students.find_one({"studentCode": payment.studentCode}, {"_id": 0})
-    if student and settings_doc:
+    if student and (wa_settings or sms_settings):
         fee_label = f"Term {payment.termNumber}" if payment.termNumber else (payment.feeName or 'Custom Fee')
-        # Build public invoice URL for WhatsApp document (view endpoint, no download header)
-        backend_url = os.environ.get('REACT_APP_BACKEND_URL', '')
-        invoice_url = f"{backend_url}/api/fees/invoice-view/{payment_obj.id}"
-        await send_fee_paid_message(student.get('mobile', ''), invoice_url, payment.amount, fee_label, payment.studentName, settings_doc)
+        mobile = student.get('mobile', '')
+        if channel in ("whatsapp", "both") and wa_settings:
+            # Build public invoice URL for WhatsApp document (view endpoint, no download header)
+            backend_url = os.environ.get('REACT_APP_BACKEND_URL', '')
+            invoice_url = f"{backend_url}/api/fees/invoice-view/{payment_obj.id}"
+            await send_fee_paid_message(mobile, invoice_url, payment.amount, fee_label, payment.studentName, wa_settings)
+        if channel in ("sms", "both"):
+            await send_sms_fee_paid(mobile, payment.amount, fee_label, payment.studentName, sms_settings)
     return payment_obj
 
 @router.get("/fees/invoice/{payment_id}")
@@ -164,7 +171,9 @@ async def export_fees(startDate: str, endDate: str, format: str = 'csv'):
 
 @router.post("/fees/send-reminders")
 async def send_fee_reminders():
-    settings_doc = await get_wa_settings()
+    channel = await get_channel()
+    wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
+    sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
     upcoming = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
     fee_types = await db.fee_types.find({"dueDate": {"$ne": None, "$lte": upcoming}}, {"_id": 0}).to_list(500)
     sent_count = 0
@@ -176,9 +185,16 @@ async def send_fee_reminders():
         for student in students:
             paid = await db.fee_payments.find_one({"studentId": student['id'], "feeTypeId": ft['id']}, {"_id": 0})
             if paid: continue
-            message = f"Fee Reminder: {ft['feeName']} of Rs.{ft['amount']} is due on {ft['dueDate']} for {student['studentName']}."
-            result = await send_whatsapp_message(student.get('mobile', ''), message, settings_doc)
-            if result.get('success'): sent_count += 1
+            mobile = student.get('mobile', '')
+            ok = False
+            if channel in ("whatsapp", "both") and wa_settings:
+                message = f"Fee Reminder: {ft['feeName']} of Rs.{ft['amount']} is due on {ft['dueDate']} for {student['studentName']}."
+                result = await send_whatsapp_message(mobile, message, wa_settings)
+                ok = ok or result.get('success')
+            if channel in ("sms", "both"):
+                result = await send_sms_fee_reminder(mobile, student['studentName'], ft['feeName'], ft['amount'], ft['dueDate'], sms_settings)
+                ok = ok or result.get('success')
+            if ok: sent_count += 1
     return {"message": f"Reminders sent to {sent_count} parents", "feeTypesChecked": len(fee_types)}
 
 # ==================== FEE REVERT ====================
