@@ -24,6 +24,9 @@ class FeeType(BaseModel):
     amount: float
     applicableClass: Optional[str] = None
     applicableSection: Optional[str] = None
+    studentId: Optional[str] = None
+    studentName: Optional[str] = None
+    customFieldKey: Optional[str] = None
     noticeStartDate: Optional[str] = None
     dueDate: Optional[str] = None
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -33,6 +36,9 @@ class FeeTypeCreate(BaseModel):
     amount: float
     applicableClass: Optional[str] = None
     applicableSection: Optional[str] = None
+    studentId: Optional[str] = None
+    studentName: Optional[str] = None
+    customFieldKey: Optional[str] = None
     noticeStartDate: Optional[str] = None
     dueDate: Optional[str] = None
 
@@ -76,6 +82,7 @@ class StudentCreate(BaseModel):
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
     customFields: Dict[str, str] = {}
+    customFeeValues: Dict[str, float] = {}
 
 class StudentUpdate(BaseModel):
     studentCode: Optional[str] = None
@@ -93,18 +100,21 @@ class StudentUpdate(BaseModel):
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
     customFields: Optional[Dict[str, str]] = None
+    customFeeValues: Optional[Dict[str, float]] = None
 
 class CustomFieldDef(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     key: str
     label: str
+    fieldType: Literal["text", "fee"] = "text"
     required: bool = False
     order: int = 0
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CustomFieldDefCreate(BaseModel):
     label: str
+    fieldType: Literal["text", "fee"] = "text"
     required: bool = False
 
 class CustomFieldDefUpdate(BaseModel):

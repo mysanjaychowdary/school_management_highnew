@@ -33,11 +33,12 @@ const Students = () => {
     studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '',
     fatherName: '', motherName: '', mobile: '', address: '',
     feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '',
-    customFields: {},
+    customFields: {}, customFeeValues: {},
   });
   const [customFieldDefs, setCustomFieldDefs] = useState([]);
   const [showFieldsDialog, setShowFieldsDialog] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldType, setNewFieldType] = useState('text'); // 'text' | 'fee'
   const [newFieldRequired, setNewFieldRequired] = useState(false);
   const [editingField, setEditingField] = useState(null); // { id, label, required }
   const [promoteData, setPromoteData] = useState({ fromClass: '', toClass: '' });
@@ -90,12 +91,19 @@ const Students = () => {
     setFormData(prev => ({ ...prev, customFields: { ...prev.customFields, [key]: value } }));
   }, []);
 
+  const updateCustomFeeValue = useCallback((key, value) => {
+    setFormData(prev => ({ ...prev, customFeeValues: { ...prev.customFeeValues, [key]: value } }));
+  }, []);
+
+  const parsedFeeValues = (values) => Object.fromEntries(Object.entries(values || {}).map(([k, v]) => [k, parseFloat(v) || 0]));
+
   const handleAddStudent = async (e) => {
     e.preventDefault();
     try {
       await api.createStudent({
         ...formData, feeTerm1: parseFloat(formData.feeTerm1),
         feeTerm2: parseFloat(formData.feeTerm2), feeTerm3: parseFloat(formData.feeTerm3),
+        customFeeValues: parsedFeeValues(formData.customFeeValues),
       });
       toast.success('Student added successfully');
       setShowAddDialog(false); resetForm(); loadStudents();
@@ -129,6 +137,7 @@ const Students = () => {
       await api.updateStudent(selectedStudent.id, {
         ...formData, feeTerm1: parseFloat(formData.feeTerm1),
         feeTerm2: parseFloat(formData.feeTerm2), feeTerm3: parseFloat(formData.feeTerm3),
+        customFeeValues: parsedFeeValues(formData.customFeeValues),
       });
       toast.success('Student updated successfully');
       setShowEditDialog(false); resetForm(); loadStudents();
@@ -221,11 +230,20 @@ const Students = () => {
   };
 
   const resetForm = () => {
-    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '', customFields: {} });
+    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '', customFields: {}, customFeeValues: {} });
   };
 
-  const openEditDialog = (student) => {
+  const openEditDialog = async (student) => {
     setSelectedStudent(student);
+    let customFeeValues = {};
+    try {
+      const detail = await api.getStudentDetail(student.id);
+      const customFees = detail.data.customFees || [];
+      customFieldDefs.filter((d) => d.fieldType === 'fee').forEach((d) => {
+        const cf = customFees.find((c) => c.customFieldKey === d.key);
+        customFeeValues[d.key] = cf ? cf.total ?? cf.amount ?? 0 : 0;
+      });
+    } catch (e) { /* fall back to zeros */ }
     setFormData({
       studentCode: student.studentCode || '', studentName: student.studentName, rollNo: student.rollNo,
       studentClass: student.studentClass, section: student.section,
@@ -234,6 +252,7 @@ const Students = () => {
       feeTerm1: student.feeTerm1, feeTerm2: student.feeTerm2, feeTerm3: student.feeTerm3,
       parentUsername: student.parentUsername || '', parentPassword: student.parentPassword || '',
       customFields: { ...(student.customFields || {}) },
+      customFeeValues,
     });
     setShowEditDialog(true);
   };
@@ -243,8 +262,8 @@ const Students = () => {
     e.preventDefault();
     if (!newFieldLabel.trim()) return;
     try {
-      await api.createCustomField({ label: newFieldLabel.trim(), required: newFieldRequired });
-      setNewFieldLabel(''); setNewFieldRequired(false);
+      await api.createCustomField({ label: newFieldLabel.trim(), fieldType: newFieldType, required: newFieldType === 'fee' ? false : newFieldRequired });
+      setNewFieldLabel(''); setNewFieldRequired(false); setNewFieldType('text');
       loadCustomFields();
       toast.success('Field added');
     } catch (error) { toast.error(error.response?.data?.detail || 'Failed to add field'); }
@@ -296,16 +315,30 @@ const Students = () => {
       <div><Label>Parent Username</Label><Input value={formData.parentUsername} onChange={(e) => updateField('parentUsername', e.target.value)} className="rounded-xl h-12" placeholder="For parent portal login" /></div>
       <div><Label>Parent Password</Label><Input value={formData.parentPassword} onChange={(e) => updateField('parentPassword', e.target.value)} className="rounded-xl h-12" placeholder="Parent portal password" /></div>
       {customFieldDefs.map((def) => (
-        <div key={def.key}>
-          <Label>{def.label}{def.required ? ' *' : ''}</Label>
-          <Input
-            data-testid={`custom-field-${def.key}`}
-            required={def.required}
-            value={formData.customFields?.[def.key] || ''}
-            onChange={(e) => updateCustomFieldValue(def.key, e.target.value)}
-            className="rounded-xl h-12"
-          />
-        </div>
+        def.fieldType === 'fee' ? (
+          <div key={def.key}>
+            <Label>{def.label} (₹)</Label>
+            <Input
+              data-testid={`custom-fee-field-${def.key}`}
+              type="number"
+              value={formData.customFeeValues?.[def.key] ?? 0}
+              onChange={(e) => updateCustomFeeValue(def.key, e.target.value)}
+              className="rounded-xl h-12"
+              placeholder="0"
+            />
+          </div>
+        ) : (
+          <div key={def.key}>
+            <Label>{def.label}{def.required ? ' *' : ''}</Label>
+            <Input
+              data-testid={`custom-field-${def.key}`}
+              required={def.required}
+              value={formData.customFields?.[def.key] || ''}
+              onChange={(e) => updateCustomFieldValue(def.key, e.target.value)}
+              className="rounded-xl h-12"
+            />
+          </div>
+        )
       ))}
     </div>
   );
@@ -607,9 +640,11 @@ const Students = () => {
                   {editingField && editingField.id === def.id ? (
                     <div className="flex items-center gap-2">
                       <Input value={editingField.label} onChange={(e) => setEditingField({ ...editingField, label: e.target.value })} className="rounded-lg h-10 flex-1" />
-                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 whitespace-nowrap">
-                        <input type="checkbox" checked={editingField.required} onChange={(e) => setEditingField({ ...editingField, required: e.target.checked })} className="w-4 h-4 rounded accent-violet-500" />Required
-                      </label>
+                      {def.fieldType !== 'fee' && (
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 whitespace-nowrap">
+                          <input type="checkbox" checked={editingField.required} onChange={(e) => setEditingField({ ...editingField, required: e.target.checked })} className="w-4 h-4 rounded accent-violet-500" />Required
+                        </label>
+                      )}
                       <button type="button" onClick={handleSaveFieldEdit} className="p-2 hover:bg-emerald-100 rounded-lg"><Check className="w-4 h-4 text-emerald-600" /></button>
                       <button type="button" onClick={() => setEditingField(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4 text-slate-500" /></button>
                     </div>
@@ -617,10 +652,13 @@ const Students = () => {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-bold text-slate-900 truncate">{def.label}</span>
+                        {def.fieldType === 'fee'
+                          ? <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex-shrink-0">Fee (₹)</span>
+                          : <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">Text</span>}
                         {def.required && <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">Required</span>}
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
-                        <button type="button" onClick={() => setEditingField({ id: def.id, label: def.label, required: def.required })} data-testid={`edit-field-${def.key}`} className="p-2 hover:bg-sky-100 rounded-lg"><Edit className="w-4 h-4 text-sky-600" /></button>
+                        <button type="button" onClick={() => setEditingField({ id: def.id, label: def.label, required: def.required, fieldType: def.fieldType })} data-testid={`edit-field-${def.key}`} className="p-2 hover:bg-sky-100 rounded-lg"><Edit className="w-4 h-4 text-sky-600" /></button>
                         <button type="button" onClick={() => handleDeleteField(def.id)} data-testid={`delete-field-${def.key}`} className="p-2 hover:bg-rose-100 rounded-lg"><Trash2 className="w-4 h-4 text-rose-600" /></button>
                       </div>
                     </div>
@@ -631,11 +669,19 @@ const Students = () => {
             <form onSubmit={handleAddField} className="border-t border-slate-200 pt-4 space-y-3">
               <Label className="font-bold">Add Field</Label>
               <div className="flex items-center gap-2">
-                <Input data-testid="new-field-label" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g., Blood Group" className="rounded-xl h-11 flex-1" />
+                <Input data-testid="new-field-label" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g., Blood Group, Bus Fee" className="rounded-xl h-11 flex-1" />
+                <div className="inline-flex bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+                  <button type="button" data-testid="new-field-type-text" onClick={() => setNewFieldType('text')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${newFieldType === 'text' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Text</button>
+                  <button type="button" data-testid="new-field-type-fee" onClick={() => setNewFieldType('fee')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${newFieldType === 'fee' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Fee (₹)</button>
+                </div>
+              </div>
+              {newFieldType === 'fee' ? (
+                <p className="text-xs text-slate-500">Shown as a ₹ amount on the student form; leave 0 for students it doesn't apply to.</p>
+              ) : (
                 <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 whitespace-nowrap">
                   <input type="checkbox" checked={newFieldRequired} onChange={(e) => setNewFieldRequired(e.target.checked)} className="w-4 h-4 rounded accent-violet-500" />Required
                 </label>
-              </div>
+              )}
               <Button data-testid="add-field-btn" type="submit" disabled={!newFieldLabel.trim()} className="w-full bg-violet-500 hover:bg-violet-600 text-white font-bold rounded-xl">
                 <Plus className="w-4 h-4 mr-2" />Add Field
               </Button>

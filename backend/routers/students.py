@@ -64,7 +64,8 @@ async def create_custom_field(data: CustomFieldDefCreate):
     if existing:
         raise HTTPException(status_code=400, detail=f"A custom field for '{data.label}' already exists")
     order = await db.custom_field_defs.count_documents({})
-    obj = CustomFieldDef(key=key, label=data.label, required=data.required, order=order)
+    required = data.required if data.fieldType != 'fee' else False
+    obj = CustomFieldDef(key=key, label=data.label, fieldType=data.fieldType, required=required, order=order)
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.custom_field_defs.insert_one(doc)
@@ -78,16 +79,39 @@ async def update_custom_field(field_id: str, data: CustomFieldDefUpdate):
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     if update:
         await db.custom_field_defs.update_one({"id": field_id}, {"$set": update})
+    if data.label and existing.get('fieldType') == 'fee' and data.label != existing.get('label'):
+        await db.fee_types.update_many({"customFieldKey": existing['key']}, {"$set": {"feeName": data.label}})
     return await db.custom_field_defs.find_one({"id": field_id}, {"_id": 0})
 
 @router.delete("/custom-fields/{field_id}")
 async def delete_custom_field(field_id: str):
-    result = await db.custom_field_defs.delete_one({"id": field_id})
-    if result.deleted_count == 0:
+    existing = await db.custom_field_defs.find_one({"id": field_id}, {"_id": 0})
+    if not existing:
         raise HTTPException(status_code=404, detail="Custom field not found")
+    if existing.get('fieldType') == 'fee':
+        await db.fee_types.delete_many({"customFieldKey": existing['key']})
+    await db.custom_field_defs.delete_one({"id": field_id})
     return {"message": "Custom field deleted"}
 
 # ==================== STUDENT ROUTES ====================
+
+async def _sync_student_fee_fields(student_id: str, student_name: str, fee_values: Dict[str, float]):
+    """Upsert/delete per-student FeeType docs for every 'fee'-type custom field based on the given values.
+    A value of 0 (or missing) means the fee doesn't apply — any existing auto-synced FeeType is removed."""
+    defs = await db.custom_field_defs.find({"fieldType": "fee"}, {"_id": 0}).to_list(200)
+    for d in defs:
+        amount = fee_values.get(d['key'], 0) or 0
+        existing = await db.fee_types.find_one({"studentId": student_id, "customFieldKey": d['key']}, {"_id": 0})
+        if amount > 0:
+            if existing:
+                await db.fee_types.update_one({"id": existing['id']}, {"$set": {"amount": amount, "feeName": d['label'], "studentName": student_name}})
+            else:
+                obj = FeeType(feeName=d['label'], amount=amount, studentId=student_id, studentName=student_name, customFieldKey=d['key'])
+                doc = obj.model_dump()
+                doc['createdAt'] = doc['createdAt'].isoformat()
+                await db.fee_types.insert_one(doc)
+        elif existing:
+            await db.fee_types.delete_one({"id": existing['id']})
 
 @router.post("/students", response_model=Student)
 async def create_student(student: StudentCreate):
@@ -98,6 +122,7 @@ async def create_student(student: StudentCreate):
     doc = student_obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.students.insert_one(doc)
+    await _sync_student_fee_fields(student_obj.id, student_obj.studentName, student.customFeeValues)
     return student_obj
 
 @router.post("/students/bulk")
@@ -111,11 +136,18 @@ async def bulk_upload_students(file: UploadFile = File(...)):
         for row in csv_reader:
             try:
                 custom_values = {}
+                custom_fee_values = {}
                 for d in field_defs:
                     raw = (row.get(d['label']) or '').strip()
-                    if d['required'] and not raw:
-                        raise ValueError(f"Missing required field '{d['label']}'")
-                    custom_values[d['key']] = raw
+                    if d['fieldType'] == 'fee':
+                        try:
+                            custom_fee_values[d['key']] = float(raw) if raw else 0.0
+                        except ValueError:
+                            raise ValueError(f"Invalid amount for '{d['label']}': {raw!r}")
+                    else:
+                        if d['required'] and not raw:
+                            raise ValueError(f"Missing required field '{d['label']}'")
+                        custom_values[d['key']] = raw
                 student_data = StudentCreate(
                     studentCode=row['Student ID'].strip(),
                     studentName=row['Student Name'].strip(), rollNo=row['Roll No'].strip(),
@@ -126,6 +158,7 @@ async def bulk_upload_students(file: UploadFile = File(...)):
                     parentUsername=row.get('Parent Username', '').strip() or None,
                     parentPassword=row.get('Parent Password', '').strip() or None,
                     customFields=custom_values,
+                    customFeeValues=custom_fee_values,
                 )
                 existing = await db.students.find_one({"studentCode": student_data.studentCode}, {"_id": 0})
                 if existing:
@@ -135,6 +168,7 @@ async def bulk_upload_students(file: UploadFile = File(...)):
                 doc = student_obj.model_dump()
                 doc['createdAt'] = doc['createdAt'].isoformat()
                 await db.students.insert_one(doc)
+                await _sync_student_fee_fields(student_obj.id, student_obj.studentName, custom_fee_values)
                 added += 1
             except Exception as e:
                 errors.append(f"Row error: {str(e)}")
@@ -150,8 +184,9 @@ async def download_sample_csv():
     header = ['Student ID', 'Student Name', 'Roll No', 'Class', 'Section', 'Father Name', 'Mother Name', 'Mobile Number', 'Address', 'Fee Term1', 'Fee Term2', 'Fee Term3', 'Parent Username', 'Parent Password']
     header += [d['label'] for d in field_defs]
     writer.writerow(header)
-    writer.writerow(['ADM001', 'John Doe', '1', '1', 'A', 'Robert Doe', 'Jane Doe', '9876543210', '123 Main St', '5000', '5000', '5000', 'parent101', 'pass101'] + ['Sample' for _ in field_defs])
-    writer.writerow(['ADM002', 'Alice Smith', '2', '1', 'A', 'Michael Smith', 'Sarah Smith', '9876543211', '456 Oak Ave', '5000', '5000', '5000', 'parent102', 'pass102'] + ['Sample' for _ in field_defs])
+    example_values = ['0' if d['fieldType'] == 'fee' else 'Sample' for d in field_defs]
+    writer.writerow(['ADM001', 'John Doe', '1', '1', 'A', 'Robert Doe', 'Jane Doe', '9876543210', '123 Main St', '5000', '5000', '5000', 'parent101', 'pass101'] + example_values)
+    writer.writerow(['ADM002', 'Alice Smith', '2', '1', 'A', 'Michael Smith', 'Sarah Smith', '9876543211', '456 Oak Ave', '5000', '5000', '5000', 'parent102', 'pass102'] + example_values)
     output.seek(0)
     return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=sample_students.csv"})
 
@@ -173,8 +208,11 @@ async def get_students(studentClass: Optional[str] = None, section: Optional[str
 async def update_student(student_id: str, update_data: StudentUpdate):
     student = await db.students.find_one({"id": student_id}, {"_id": 0})
     if not student: raise HTTPException(status_code=404, detail="Student not found")
-    update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None and k != 'customFeeValues'}
     if update_dict: await db.students.update_one({"id": student_id}, {"$set": update_dict})
+    if update_data.customFeeValues is not None:
+        student_name = update_data.studentName or student.get('studentName', '')
+        await _sync_student_fee_fields(student_id, student_name, update_data.customFeeValues)
     updated = await db.students.find_one({"id": student_id}, {"_id": 0})
     if isinstance(updated.get('createdAt'), str): updated['createdAt'] = datetime.fromisoformat(updated['createdAt'])
     return Student(**updated)
@@ -203,6 +241,7 @@ async def promote_students_preview(request: PromoteRequest):
                 {"applicableClass": request.fromClass, "applicableSection": student.get('section', '')},
                 {"applicableClass": request.fromClass, "applicableSection": {"$in": [None, ""]}},
                 {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+                {"studentId": student['id']},
             ]
         }, {"_id": 0}).to_list(500)
         total_custom = sum(cf.get('amount', 0) for cf in old_custom_fees)
@@ -257,6 +296,7 @@ async def _calc_promotion(student: Dict):
             {"applicableClass": from_class, "applicableSection": student.get('section', '')},
             {"applicableClass": from_class, "applicableSection": {"$in": [None, ""]}},
             {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)
     total_custom = sum(cf.get('amount', 0) for cf in old_custom_fees)

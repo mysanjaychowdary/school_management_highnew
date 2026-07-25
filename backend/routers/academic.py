@@ -90,12 +90,14 @@ async def send_attendance_alerts(data: Dict):
 async def get_fee_status(studentClass: str, section: str):
     """Get fee status for all students in a class/section"""
     students = await db.students.find({"studentClass": studentClass, "section": section}, {"_id": 0}).to_list(1000)
-    # Get all custom fee types applicable
+    student_ids = [s['id'] for s in students]
+    # Get all custom fee types applicable — class/section-wide ones, plus any targeting a specific student in this class
     custom_fees = await db.fee_types.find({
         "$or": [
             {"applicableClass": studentClass, "applicableSection": section},
             {"applicableClass": studentClass, "applicableSection": {"$in": [None, ""]}},
             {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"studentId": {"$in": student_ids}},
         ]
     }, {"_id": 0}).to_list(500)
 
@@ -112,8 +114,11 @@ async def get_fee_status(studentClass: str, section: str):
             if p.get('feeTypeId'):
                 paid_custom[p['feeTypeId']] = paid_custom.get(p['feeTypeId'], 0) + p['amount']
 
+        # Only fees not targeting a specific student, or targeting this exact student
+        applicable = [cf for cf in custom_fees if not cf.get('studentId') or cf['studentId'] == student['id']]
+
         total_expected = student.get('feeTerm1', 0) + student.get('feeTerm2', 0) + student.get('feeTerm3', 0)
-        total_expected += sum(cf['amount'] for cf in custom_fees)
+        total_expected += sum(cf['amount'] for cf in applicable)
         total_paid = sum(paid_terms.values()) + sum(paid_custom.values())
 
         row = {
@@ -130,7 +135,7 @@ async def get_fee_status(studentClass: str, section: str):
                 "feeName": cf['feeName'],
                 "total": cf['amount'],
                 "paid": paid_custom.get(cf['id'], 0)
-            } for cf in custom_fees],
+            } for cf in applicable],
             "totalExpected": total_expected,
             "totalPaid": total_paid,
             "totalPending": total_expected - total_paid,

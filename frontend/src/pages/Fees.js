@@ -619,13 +619,18 @@ const Fees = () => {
                           {'\u20B9'}{s.term3Paid}/{s.term3Total}
                         </span>
                       </td>
-                      {s.customFees.map((cf, i) => (
-                        <td key={i} className="px-3 py-2 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${cf.paid >= cf.total ? 'bg-emerald-100 text-emerald-700' : cf.paid > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
-                            {'\u20B9'}{cf.paid}/{cf.total}
-                          </span>
-                        </td>
-                      ))}
+                      {feeStatusData.customFeeNames.map((name) => {
+                        const cf = s.customFees.find((c) => c.feeName === name);
+                        return (
+                          <td key={name} className="px-3 py-2 text-center">
+                            {cf ? (
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${cf.paid >= cf.total ? 'bg-emerald-100 text-emerald-700' : cf.paid > 0 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                                {'\u20B9'}{cf.paid}/{cf.total}
+                              </span>
+                            ) : <span className="text-slate-300">{'\u2014'}</span>}
+                          </td>
+                        );
+                      })}
                       <td className="px-3 py-2 text-center font-bold">{'\u20B9'}{s.totalExpected.toLocaleString()}</td>
                       <td className="px-3 py-2 text-center font-bold text-emerald-600">{'\u20B9'}{s.totalPaid.toLocaleString()}</td>
                       <td className="px-3 py-2 text-center font-bold text-rose-600">{'\u20B9'}{s.totalPending.toLocaleString()}</td>

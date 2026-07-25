@@ -299,6 +299,7 @@ async def get_student_detail(student_id: str):
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
             {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)
     paid_terms, paid_custom = {}, {}
@@ -340,6 +341,7 @@ async def parent_dashboard(student_id: str):
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
             {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)
     paid_terms, paid_custom = {}, {}

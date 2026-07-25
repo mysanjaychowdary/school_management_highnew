@@ -59,7 +59,7 @@ const StudentDetail = () => {
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mother</p><p className="font-bold text-slate-900">{student.motherName}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Mobile</p><p className="font-bold text-slate-900">{showFullMobile ? student.mobile : maskMobile(student.mobile)}</p></div>
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Address</p><p className="font-bold text-slate-900">{student.address}</p></div>
-          {customFieldDefs.map((def) => (
+          {customFieldDefs.filter((d) => d.fieldType !== 'fee').map((def) => (
             <div key={def.key}><p className="text-xs font-bold uppercase tracking-widest text-slate-400">{def.label}</p><p className="font-bold text-slate-900">{student.customFields?.[def.key] || '—'}</p></div>
           ))}
         </div>

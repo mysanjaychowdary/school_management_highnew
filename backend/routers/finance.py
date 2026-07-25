@@ -71,6 +71,7 @@ async def get_student_fees(student_code: str):
             {"applicableClass": student.get('studentClass', ''), "applicableSection": student.get('section', '')},
             {"applicableClass": student.get('studentClass', ''), "applicableSection": {"$in": [None, ""]}},
             {"applicableClass": {"$in": [None, ""]}, "applicableSection": {"$in": [None, ""]}},
+            {"studentId": student['id']},
         ]
     }, {"_id": 0}).to_list(500)
     return {"student": student, "payments": payments, "paidTerms": paid_terms, "paidCustomFees": paid_custom, "customFees": custom_fees}
