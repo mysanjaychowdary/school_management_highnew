@@ -281,7 +281,7 @@ async def create_staff(data: StaffCreate, _admin=Depends(require_admin)):
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.staff.insert_one(doc)
-    return {k: v for k, v in doc.items() if k != 'password'}
+    return {k: v for k, v in obj.model_dump().items() if k != 'password'}
 
 @router.get("/staff")
 async def get_staff(_staff=Depends(require_staff)):
