@@ -71,7 +71,7 @@ const StaffPage = () => {
     try {
       setImpersonateLoading(true);
       const r = await api.impersonateStaff({ superAdminUsername: user.username, superAdminPassword: impersonatePassword, staffId: impersonateTarget.id });
-      impersonateStaff(r.data.user, r.data.role, r.data.roleDetails);
+      impersonateStaff(r.data.user, r.data.role, r.data.roleDetails, r.data.access_token);
       setImpersonateTarget(null); setImpersonatePassword('');
       navigate('/');
     } catch (error) { toast.error(error.response?.data?.detail || 'Failed to log in as staff'); }

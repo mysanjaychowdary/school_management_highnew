@@ -1,17 +1,18 @@
 """Hall ticket router: exam timetable schedules per class/section and printable hall ticket PDFs."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from db import db
 from models import *
 from services.pdf import generate_hall_tickets_pdf
+from security import require_staff
 
 router = APIRouter()
 
 
 @router.post("/hall-ticket-exams", response_model=HallTicketExam)
-async def create_hall_ticket_exam(data: HallTicketExamCreate):
+async def create_hall_ticket_exam(data: HallTicketExamCreate, _staff=Depends(require_staff)):
     obj = HallTicketExam(**data.model_dump())
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
@@ -26,7 +27,7 @@ async def list_hall_ticket_exams(studentClass: Optional[str] = None, section: Op
     return await db.hall_ticket_exams.find(query, {"_id": 0}).to_list(500)
 
 @router.delete("/hall-ticket-exams/{exam_id}")
-async def delete_hall_ticket_exam(exam_id: str):
+async def delete_hall_ticket_exam(exam_id: str, _staff=Depends(require_staff)):
     result = await db.hall_ticket_exams.delete_one({"id": exam_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Exam schedule not found")

@@ -17,6 +17,14 @@ API = f"{BASE_URL}/api"
 def api_client():
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
+    r = s.post(f"{API}/auth/login", json={
+        "username": os.environ.get("SUPER_ADMIN_USERNAME", "admin"),
+        "password": os.environ.get("SUPER_ADMIN_PASSWORD", "12345678"),
+    })
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    token = r.json().get("access_token")
+    assert token, "Login did not return an access_token"
+    s.headers.update({"Authorization": f"Bearer {token}"})
     return s
 
 

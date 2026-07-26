@@ -3,6 +3,32 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+const TOKEN_KEY = 'schoolpro_token';
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) => {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+};
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+axios.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isAuthEndpoint = (error.config?.url || '').includes('/auth/') || (error.config?.url || '').includes('/driver-login');
+    if (error.response?.status === 401 && !isAuthEndpoint) {
+      clearToken();
+      localStorage.removeItem('schoolpro_auth');
+      if (window.location.pathname !== '/') window.location.href = '/';
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const api = {
   // Classes
   getClasses: () => axios.get(`${API}/classes`),

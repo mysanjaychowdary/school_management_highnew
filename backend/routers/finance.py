@@ -1,5 +1,5 @@
 """Finance (fees + fee types + concessions + expenses + revert) router."""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse, Response
 from typing import Optional, List, Dict
 from datetime import datetime, timezone, timedelta
@@ -16,9 +16,12 @@ from models import *
 from services.whatsapp import *
 from services.sms import *
 from services.pdf import *
+from security import require_admin, require_roles
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+require_concession_approver = require_roles('super_admin', 'main_admin')
 
 # ==================== FEE TYPES ROUTES ====================
 
@@ -201,7 +204,7 @@ async def send_fee_reminders():
 # ==================== FEE REVERT ====================
 
 @router.post("/fees/revert/{payment_id}")
-async def revert_fee_payment(payment_id: str):
+async def revert_fee_payment(payment_id: str, _admin=Depends(require_admin)):
     payment = await db.fee_payments.find_one({"id": payment_id}, {"_id": 0})
     if not payment: raise HTTPException(status_code=404, detail="Payment not found")
     if payment.get('status') == 'reverted': raise HTTPException(status_code=400, detail="Payment already reverted")
@@ -249,7 +252,7 @@ async def get_concessions(status: Optional[str] = None):
     return await db.concessions.find(query, {"_id": 0}).to_list(1000)
 
 @router.post("/concessions/{concession_id}/approve")
-async def approve_concession(concession_id: str):
+async def approve_concession(concession_id: str, _admin=Depends(require_concession_approver)):
     con = await db.concessions.find_one({"id": concession_id}, {"_id": 0})
     if not con: raise HTTPException(status_code=404, detail="Concession not found")
     if con['status'] != 'pending': raise HTTPException(status_code=400, detail="Already processed")
@@ -274,7 +277,7 @@ async def approve_concession(concession_id: str):
     return {"message": "Concession approved and applied"}
 
 @router.post("/concessions/{concession_id}/reject")
-async def reject_concession(concession_id: str):
+async def reject_concession(concession_id: str, _admin=Depends(require_concession_approver)):
     con = await db.concessions.find_one({"id": concession_id}, {"_id": 0})
     if not con: raise HTTPException(status_code=404, detail="Concession not found")
     if con['status'] != 'pending': raise HTTPException(status_code=400, detail="Already processed")

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GraduationCap, ClipboardCheck, DollarSign, CalendarDays, BookOpenCheck, LogOut, Download, User, Phone, MapPin, FileText, Send, BarChart3, Home, MoreHorizontal, ChevronRight, Bus as BusIcon, Lock } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, setToken, clearToken } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -61,6 +61,7 @@ const ParentPortal = () => {
     try {
       setLoading(true);
       const response = await api.parentLogin({ username, password });
+      setToken(response.data.access_token);
       setLoggedIn(true);
       const dash = await api.getParentDashboard(response.data.student.id);
       setDashData(dash.data);
@@ -69,7 +70,7 @@ const ParentPortal = () => {
     finally { setLoading(false); }
   };
 
-  const handleLogout = () => { setLoggedIn(false); setDashData(null); setUsername(''); setPassword(''); setActiveTab('overview'); setLeaveRequests([]); };
+  const handleLogout = () => { clearToken(); setLoggedIn(false); setDashData(null); setUsername(''); setPassword(''); setActiveTab('overview'); setLeaveRequests([]); };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();

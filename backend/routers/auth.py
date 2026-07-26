@@ -1,8 +1,9 @@
 """Auth and Class/Section router."""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse, Response
 from typing import Optional, List, Dict
 from datetime import datetime, timezone, timedelta
+import os
 import uuid
 import csv
 import io
@@ -14,6 +15,7 @@ from db import db
 from models import *
 from services.whatsapp import *
 from services.pdf import *
+from security import hash_password, verify_password, create_access_token, require_admin, require_staff
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -54,6 +56,28 @@ async def ensure_system_roles():
                     update['modulePerms'] = merged_perms
                 await db.roles.update_one({"roleName": sr['roleName']}, {"$set": update})
 
+async def ensure_super_admin():
+    """Bootstrap the super_admin staff account from env vars if one doesn't exist yet."""
+    existing = await db.staff.find_one({"role": "super_admin"}, {"_id": 0})
+    if existing:
+        return
+    username = os.environ.get("SUPER_ADMIN_USERNAME", "admin")
+    password = os.environ.get("SUPER_ADMIN_PASSWORD")
+    if not password:
+        password = "12345678"
+        logger.warning(
+            "SUPER_ADMIN_PASSWORD not set - bootstrapping super_admin '%s' with an insecure default password. "
+            "Set SUPER_ADMIN_USERNAME/SUPER_ADMIN_PASSWORD in backend/.env before going live.", username)
+    doc = Staff(
+        name="Super Admin", role="super_admin", mobile="",
+        joiningDate=datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        username=username, password=hash_password(password),
+    ).model_dump()
+    doc['createdAt'] = doc['createdAt'].isoformat()
+    await db.staff.insert_one(doc)
+    logger.info("Bootstrapped super_admin staff account '%s'", username)
+
+
 async def get_role_by_name(role_name: str):
     """Fetch role permissions. Falls back to a permissive empty role if not found."""
     await ensure_system_roles()
@@ -68,7 +92,7 @@ async def get_role_by_name(role_name: str):
 # ==================== ROLES CRUD ====================
 
 @router.get("/roles")
-async def list_roles():
+async def list_roles(_admin=Depends(require_admin)):
     await ensure_system_roles()
     roles = await db.roles.find({}, {"_id": 0}).to_list(500)
     # Backfill modulePerms on legacy docs
@@ -80,7 +104,7 @@ async def list_roles():
     return roles
 
 @router.post("/roles", response_model=Role)
-async def create_role(data: RoleCreate):
+async def create_role(data: RoleCreate, _admin=Depends(require_admin)):
     existing = await db.roles.find_one({"roleName": data.roleName}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Role name already exists")
@@ -94,7 +118,7 @@ async def create_role(data: RoleCreate):
     return obj
 
 @router.put("/roles/{role_id}")
-async def update_role(role_id: str, data: RoleUpdate):
+async def update_role(role_id: str, data: RoleUpdate, _admin=Depends(require_admin)):
     role = await db.roles.find_one({"id": role_id}, {"_id": 0})
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
@@ -107,7 +131,7 @@ async def update_role(role_id: str, data: RoleUpdate):
     return await db.roles.find_one({"id": role_id}, {"_id": 0})
 
 @router.delete("/roles/{role_id}")
-async def delete_role(role_id: str):
+async def delete_role(role_id: str, _admin=Depends(require_admin)):
     role = await db.roles.find_one({"id": role_id}, {"_id": 0})
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
@@ -123,48 +147,57 @@ async def delete_role(role_id: str):
 
 # ==================== AUTH ROUTES ====================
 
+async def _staff_login(data: LoginRequest):
+    staff = await db.staff.find_one({"username": data.username}, {"_id": 0})
+    if not staff or not verify_password(data.password, staff.get('password')):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    role_doc = await get_role_by_name(staff['role'])
+    token = create_access_token(sub=staff['id'], role=staff['role'], token_type='staff')
+    return {
+        "success": True, "user": {k: v for k, v in staff.items() if k != 'password'},
+        "role": staff['role'], "roleDetails": role_doc,
+        "access_token": token, "token_type": "bearer",
+    }
+
 @router.post("/auth/login")
 async def login(data: LoginRequest):
-    # Check super admin
-    if data.username == "admin" and data.password == "12345678":
-        role_doc = await get_role_by_name("super_admin")
-        return {"success": True, "user": {"name": "Super Admin", "username": "admin"}, "role": "super_admin", "roleDetails": role_doc}
-    # Check staff (teacher, office_staff, admin_role, or custom)
-    staff = await db.staff.find_one({"username": data.username, "password": data.password}, {"_id": 0})
-    if staff:
-        role_doc = await get_role_by_name(staff['role'])
-        return {"success": True, "user": {k: v for k, v in staff.items() if k != 'password'}, "role": staff['role'], "roleDetails": role_doc}
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+    return await _staff_login(data)
 
 @router.post("/auth/staff-login")
 async def staff_login(data: LoginRequest):
-    staff = await db.staff.find_one({"username": data.username, "password": data.password}, {"_id": 0})
-    if not staff:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    role_doc = await get_role_by_name(staff['role'])
-    return {"success": True, "user": {k: v for k, v in staff.items() if k != 'password'}, "role": staff['role'], "roleDetails": role_doc}
+    return await _staff_login(data)
 
 @router.post("/auth/parent-login")
 async def parent_login(data: LoginRequest):
-    student = await db.students.find_one({"parentUsername": data.username, "parentPassword": data.password}, {"_id": 0})
-    if not student:
+    student = await db.students.find_one({"parentUsername": data.username}, {"_id": 0})
+    if not student or not verify_password(data.password, student.get('parentPassword')):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"success": True, "student": {k: v for k, v in student.items() if k != 'parentPassword'}, "role": "parent"}
+    token = create_access_token(sub=student['id'], role='parent', token_type='parent')
+    return {
+        "success": True, "student": {k: v for k, v in student.items() if k != 'parentPassword'}, "role": "parent",
+        "access_token": token, "token_type": "bearer",
+    }
 
 @router.post("/auth/impersonate-staff")
-async def impersonate_staff(data: ImpersonateStaffRequest):
-    if data.superAdminUsername != "admin" or data.superAdminPassword != "12345678":
+async def impersonate_staff(data: ImpersonateStaffRequest, _caller=Depends(require_admin)):
+    super_admin = await db.staff.find_one({"username": data.superAdminUsername, "role": "super_admin"}, {"_id": 0})
+    if not super_admin or not verify_password(data.superAdminPassword, super_admin.get('password')):
         raise HTTPException(status_code=401, detail="Invalid super admin credentials")
     staff = await db.staff.find_one({"id": data.staffId}, {"_id": 0})
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found")
     role_doc = await get_role_by_name(staff['role'])
-    return {"success": True, "user": {k: v for k, v in staff.items() if k != 'password'}, "role": staff['role'], "roleDetails": role_doc}
+    token = create_access_token(sub=staff['id'], role=staff['role'], token_type='staff')
+    return {
+        "success": True, "user": {k: v for k, v in staff.items() if k != 'password'},
+        "role": staff['role'], "roleDetails": role_doc,
+        "access_token": token, "token_type": "bearer",
+    }
 
 # ==================== CLASS & SECTION ROUTES ====================
 
 @router.post("/classes", response_model=ClassSection)
-async def create_class_section(data: ClassSectionCreate):
+async def create_class_section(data: ClassSectionCreate, _admin=Depends(require_admin)):
     existing = await db.classes.find_one({"className": data.className}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Class already exists")
@@ -175,18 +208,18 @@ async def create_class_section(data: ClassSectionCreate):
     return obj
 
 @router.get("/classes")
-async def get_classes():
+async def get_classes(_staff=Depends(require_staff)):
     return await db.classes.find({}, {"_id": 0}).to_list(100)
 
 @router.put("/classes/{class_id}")
-async def update_class_section(class_id: str, data: ClassSectionCreate):
+async def update_class_section(class_id: str, data: ClassSectionCreate, _admin=Depends(require_admin)):
     result = await db.classes.update_one({"id": class_id}, {"$set": {"className": data.className, "sections": data.sections}})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Class not found")
     return await db.classes.find_one({"id": class_id}, {"_id": 0})
 
 @router.delete("/classes/{class_id}")
-async def delete_class_section(class_id: str):
+async def delete_class_section(class_id: str, _admin=Depends(require_admin)):
     result = await db.classes.delete_one({"id": class_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Class not found")

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Bus, LogOut, Play, Square, MapPin } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, setToken, clearToken } from '../lib/api';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -51,6 +51,7 @@ const DriverPortal = () => {
     try {
       setLoading(true);
       const r = await api.busDriverLogin({ username, password });
+      setToken(r.data.access_token);
       const b = r.data.bus;
       setBus(b);
       if (b.status === 'driving') {
@@ -63,6 +64,7 @@ const DriverPortal = () => {
 
   const handleLogout = () => {
     stopWatching();
+    clearToken();
     setBus(null); setDriving(false); setUsername(''); setPassword(''); setShowStopForm(false); setStopCode('');
   };
 

@@ -1,5 +1,5 @@
 """Students router."""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse, Response
 from typing import Optional, List, Dict
 from datetime import datetime, timezone, timedelta
@@ -14,26 +14,8 @@ from db import db
 from models import *
 from services.whatsapp import *
 from services.pdf import *
+from security import hash_password, require_staff
 import re
-
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-
-from fastapi.responses import StreamingResponse, Response
-from typing import Optional, List, Dict
-from datetime import datetime, timezone, timedelta
-import uuid
-import csv
-import io
-import base64
-import logging
-from openpyxl import Workbook
-
-from db import db
-from models import *
-from services.whatsapp import *
-from services.pdf import *
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -113,12 +95,15 @@ async def _sync_student_fee_fields(student_id: str, student_name: str, fee_value
         elif existing:
             await db.fee_types.delete_one({"id": existing['id']})
 
-@router.post("/students", response_model=Student)
-async def create_student(student: StudentCreate):
+@router.post("/students", response_model=Student, response_model_exclude={"parentPassword"})
+async def create_student(student: StudentCreate, _staff=Depends(require_staff)):
     existing = await db.students.find_one({"studentCode": student.studentCode}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Student ID already exists")
-    student_obj = Student(**student.model_dump())
+    payload = student.model_dump()
+    if payload.get('parentPassword'):
+        payload['parentPassword'] = hash_password(payload['parentPassword'])
+    student_obj = Student(**payload)
     doc = student_obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.students.insert_one(doc)
@@ -126,7 +111,7 @@ async def create_student(student: StudentCreate):
     return student_obj
 
 @router.post("/students/bulk")
-async def bulk_upload_students(file: UploadFile = File(...)):
+async def bulk_upload_students(file: UploadFile = File(...), _staff=Depends(require_staff)):
     try:
         content = await file.read()
         decoded = content.decode('utf-8')
@@ -164,7 +149,10 @@ async def bulk_upload_students(file: UploadFile = File(...)):
                 if existing:
                     errors.append(f"Student ID {student_data.studentCode} exists")
                     continue
-                student_obj = Student(**student_data.model_dump())
+                student_payload = student_data.model_dump()
+                if student_payload.get('parentPassword'):
+                    student_payload['parentPassword'] = hash_password(student_payload['parentPassword'])
+                student_obj = Student(**student_payload)
                 doc = student_obj.model_dump()
                 doc['createdAt'] = doc['createdAt'].isoformat()
                 await db.students.insert_one(doc)
@@ -202,13 +190,16 @@ async def get_students(studentClass: Optional[str] = None, section: Optional[str
     for s in students:
         if isinstance(s.get('createdAt'), str): s['createdAt'] = datetime.fromisoformat(s['createdAt'])
         if 'studentCode' not in s: s['studentCode'] = s.get('rollNo', '')
+        s.pop('parentPassword', None)
     return {"students": students, "total": total, "page": page, "limit": limit, "totalPages": max(1, -(-total // limit))}
 
-@router.put("/students/{student_id}", response_model=Student)
-async def update_student(student_id: str, update_data: StudentUpdate):
+@router.put("/students/{student_id}", response_model=Student, response_model_exclude={"parentPassword"})
+async def update_student(student_id: str, update_data: StudentUpdate, _staff=Depends(require_staff)):
     student = await db.students.find_one({"id": student_id}, {"_id": 0})
     if not student: raise HTTPException(status_code=404, detail="Student not found")
     update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None and k != 'customFeeValues'}
+    if update_dict.get('parentPassword'):
+        update_dict['parentPassword'] = hash_password(update_dict['parentPassword'])
     if update_dict: await db.students.update_one({"id": student_id}, {"$set": update_dict})
     if update_data.customFeeValues is not None:
         student_name = update_data.studentName or student.get('studentName', '')
@@ -218,7 +209,7 @@ async def update_student(student_id: str, update_data: StudentUpdate):
     return Student(**updated)
 
 @router.delete("/students/{student_id}")
-async def delete_student(student_id: str):
+async def delete_student(student_id: str, _staff=Depends(require_staff)):
     result = await db.students.delete_one({"id": student_id})
     if result.deleted_count == 0: raise HTTPException(status_code=404, detail="Student not found")
     return {"message": "Student deleted"}

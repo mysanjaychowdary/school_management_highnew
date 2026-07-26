@@ -16,17 +16,21 @@ API = f"{BASE_URL}/api"
 def api_client():
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
+    r = s.post(f"{API}/auth/login", json={
+        "username": os.environ.get("SUPER_ADMIN_USERNAME", "admin"),
+        "password": os.environ.get("SUPER_ADMIN_PASSWORD", "12345678"),
+    })
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    token = r.json().get("access_token")
+    assert token, "Login did not return an access_token"
+    s.headers.update({"Authorization": f"Bearer {token}"})
     return s
 
 
 @pytest.fixture(scope="session")
 def admin_token(api_client):
-    r = api_client.post(f"{API}/auth/login", json={"username": "admin", "password": "12345678"})
-    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
-    data = r.json()
-    # Backend returns {"success": true, "user": {...}, "role": "..."} with no token
-    assert data.get("success") is True
-    return data.get("role") or "super_admin"
+    # api_client is already authenticated as super_admin; kept for backward compatibility.
+    return "super_admin"
 
 
 @pytest.fixture(scope="session")

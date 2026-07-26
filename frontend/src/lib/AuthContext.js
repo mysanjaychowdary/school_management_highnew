@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from './api';
+import { api, getToken, setToken as persistToken, clearToken } from './api';
 
 const AuthContext = createContext();
 
@@ -76,24 +76,27 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: roleName, perms: p, impersonating: impersonatingFlag, adminSession: adminSessionData }));
   };
 
-  const login = (userData, roleName, roleDetails) => {
+  const login = (userData, roleName, roleDetails, token) => {
     const p = roleDetails ? { ...DEFAULT_PERMS, ...roleDetails } : DEFAULT_PERMS;
     setUser(userData); setRole(roleName); setPerms(p); setImpersonating(false); setAdminSession(null);
     persist(userData, roleName, p, false, null);
+    persistToken(token);
     refreshDisabledModules();
   };
 
   const logout = () => {
     setUser(null); setRole(null); setPerms(DEFAULT_PERMS); setImpersonating(false); setAdminSession(null);
     localStorage.removeItem('schoolpro_auth');
+    clearToken();
   };
 
-  const impersonateStaff = (userData, roleName, roleDetails) => {
+  const impersonateStaff = (userData, roleName, roleDetails, token) => {
     const p = roleDetails ? { ...DEFAULT_PERMS, ...roleDetails } : DEFAULT_PERMS;
-    const snapshot = impersonating ? adminSession : { user, role, perms };
+    const snapshot = impersonating ? adminSession : { user, role, perms, token: getToken() };
     setAdminSession(snapshot); setImpersonating(true);
     setUser(userData); setRole(roleName); setPerms(p);
     persist(userData, roleName, p, true, snapshot);
+    persistToken(token);
     refreshDisabledModules();
   };
 
@@ -102,6 +105,7 @@ export const AuthProvider = ({ children }) => {
     setUser(adminSession.user); setRole(adminSession.role); setPerms(adminSession.perms);
     setImpersonating(false); setAdminSession(null);
     persist(adminSession.user, adminSession.role, adminSession.perms, false, null);
+    if (adminSession.token) persistToken(adminSession.token);
   };
 
   return (

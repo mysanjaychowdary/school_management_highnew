@@ -1,5 +1,5 @@
 """Operations (settings + leave + inventory + staff + parent + dashboard + uploads) router."""
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse, Response
 from typing import Optional, List, Dict
 from datetime import datetime, timezone, timedelta
@@ -16,9 +16,16 @@ from models import *
 from services.whatsapp import *
 from services.sms import *
 from services.pdf import *
+from security import hash_password, verify_password, require_admin, require_staff, get_current_user, ADMIN_ROLES
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _strip(doc: Optional[dict], *keys: str) -> Optional[dict]:
+    if not doc:
+        return doc
+    return {k: v for k, v in doc.items() if k not in keys}
 
 # ==================== DATABASE SETTINGS ====================
 
@@ -78,13 +85,13 @@ async def reject_leave_request(request_id: str, data: Optional[Dict] = None):
 # ==================== SETTINGS ROUTES ====================
 
 @router.get("/settings/whatsapp")
-async def get_whatsapp_settings():
+async def get_whatsapp_settings(_admin=Depends(require_admin)):
     settings = await db.settings.find_one({"type": "whatsapp"}, {"_id": 0})
     if not settings: return {"phoneNumberId": "", "accessToken": ""}
     return settings
 
 @router.put("/settings/whatsapp")
-async def update_whatsapp_settings(settings: WhatsAppSettings):
+async def update_whatsapp_settings(settings: WhatsAppSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "whatsapp"}, {"$set": {"phoneNumberId": settings.phoneNumberId, "accessToken": settings.accessToken}}, upsert=True)
     return {"message": "Settings updated"}
 
@@ -95,7 +102,7 @@ async def get_school_settings():
     return settings
 
 @router.put("/settings/school")
-async def update_school_settings(data: SchoolSettings):
+async def update_school_settings(data: SchoolSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "school"}, {"$set": {"schoolName": data.schoolName, "schoolAddress": data.schoolAddress, "logoUrl": data.logoUrl or ""}}, upsert=True)
     return {"message": "School settings updated"}
 
@@ -106,12 +113,12 @@ async def get_enabled_modules():
     return settings
 
 @router.put("/settings/enabled-modules")
-async def update_enabled_modules(data: EnabledModulesSettings):
+async def update_enabled_modules(data: EnabledModulesSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "enabled_modules"}, {"$set": {"disabledModules": data.disabledModules}}, upsert=True)
     return {"message": "Feature toggles updated"}
 
 @router.get("/settings/whatsapp-templates")
-async def get_whatsapp_templates():
+async def get_whatsapp_templates(_admin=Depends(require_admin)):
     empty = {"name": "", "componentsJson": "", "enabled": True}
     doc = await db.settings.find_one({"type": "whatsapp_templates"}, {"_id": 0})
     if not doc:
@@ -128,7 +135,7 @@ async def get_whatsapp_templates():
     }
 
 @router.put("/settings/whatsapp-templates")
-async def update_whatsapp_templates(data: WhatsAppTemplates):
+async def update_whatsapp_templates(data: WhatsAppTemplates, _admin=Depends(require_admin)):
     # Validate componentsJson is valid JSON (when provided)
     import json as _json
     for key in ("absent", "fee_paid", "event", "marks"):
@@ -151,18 +158,18 @@ async def update_whatsapp_templates(data: WhatsAppTemplates):
     return {"message": "WhatsApp templates updated"}
 
 @router.get("/settings/sms")
-async def get_sms_settings_route():
+async def get_sms_settings_route(_admin=Depends(require_admin)):
     settings = await db.settings.find_one({"type": "sms"}, {"_id": 0})
     if not settings: return {"userid": "", "password": "", "sender": "", "peid": ""}
     return settings
 
 @router.put("/settings/sms")
-async def update_sms_settings(settings: SMSSettings):
+async def update_sms_settings(settings: SMSSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "sms"}, {"$set": {"userid": settings.userid, "password": settings.password, "sender": settings.sender, "peid": settings.peid}}, upsert=True)
     return {"message": "Settings updated"}
 
 @router.get("/settings/sms-templates")
-async def get_sms_templates():
+async def get_sms_templates(_admin=Depends(require_admin)):
     empty = {"message": "", "tpid": "", "enabled": True}
     doc = await db.settings.find_one({"type": "sms_templates"}, {"_id": 0})
     if not doc:
@@ -180,7 +187,7 @@ async def get_sms_templates():
     }
 
 @router.put("/settings/sms-templates")
-async def update_sms_templates(data: SMSTemplates):
+async def update_sms_templates(data: SMSTemplates, _admin=Depends(require_admin)):
     await db.settings.update_one(
         {"type": "sms_templates"},
         {"$set": {
@@ -195,19 +202,19 @@ async def update_sms_templates(data: SMSTemplates):
     return {"message": "SMS templates updated"}
 
 @router.get("/settings/notification-channel")
-async def get_notification_channel():
+async def get_notification_channel(_admin=Depends(require_admin)):
     doc = await db.settings.find_one({"type": "notification_channel"}, {"_id": 0})
     return {"channel": (doc or {}).get("channel", "whatsapp")}
 
 @router.put("/settings/notification-channel")
-async def update_notification_channel(data: NotificationChannelSettings):
+async def update_notification_channel(data: NotificationChannelSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "notification_channel"}, {"$set": {"channel": data.channel}}, upsert=True)
     return {"message": "Notification channel updated"}
 
 # ==================== FILE UPLOAD ====================
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), _staff=Depends(require_staff)):
     content = await file.read()
     base64_content = base64.b64encode(content).decode('utf-8')
     return {"url": f"data:{file.content_type};base64,{base64_content}", "filename": file.filename}
@@ -215,7 +222,7 @@ async def upload_file(file: UploadFile = File(...)):
 # ==================== INVENTORY ROUTES ====================
 
 @router.post("/inventory")
-async def create_inventory_item(item: InventoryItemCreate):
+async def create_inventory_item(item: InventoryItemCreate, _staff=Depends(require_staff)):
     obj = InventoryItem(**item.model_dump())
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
@@ -265,23 +272,27 @@ async def get_inventory_issues(studentId: Optional[str] = None):
 # ==================== STAFF ROUTES ====================
 
 @router.post("/staff")
-async def create_staff(data: StaffCreate):
+async def create_staff(data: StaffCreate, _admin=Depends(require_admin)):
     existing = await db.staff.find_one({"username": data.username}, {"_id": 0})
     if existing: raise HTTPException(status_code=400, detail="Username already exists")
-    obj = Staff(**data.model_dump())
+    payload = data.model_dump()
+    payload['password'] = hash_password(payload['password'])
+    obj = Staff(**payload)
     doc = obj.model_dump()
     doc['createdAt'] = doc['createdAt'].isoformat()
     await db.staff.insert_one(doc)
-    return {k: v for k, v in obj.model_dump().items() if k != 'password'}
+    return {k: v for k, v in doc.items() if k != 'password'}
 
 @router.get("/staff")
-async def get_staff():
+async def get_staff(_staff=Depends(require_staff)):
     staff = await db.staff.find({}, {"_id": 0}).to_list(500)
     return [{k: v for k, v in s.items() if k != 'password'} for s in staff]
 
 @router.put("/staff/{staff_id}")
-async def update_staff(staff_id: str, data: StaffUpdate):
+async def update_staff(staff_id: str, data: StaffUpdate, _admin=Depends(require_admin)):
     update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update_dict.get('password'):
+        update_dict['password'] = hash_password(update_dict['password'])
     if not update_dict: return await db.staff.find_one({"id": staff_id}, {"_id": 0, "password": 0})
     result = await db.staff.update_one({"id": staff_id}, {"$set": update_dict})
     if result.matched_count == 0: raise HTTPException(status_code=404, detail="Staff not found")
@@ -289,25 +300,27 @@ async def update_staff(staff_id: str, data: StaffUpdate):
     return {k: v for k, v in updated.items() if k != 'password'}
 
 @router.delete("/staff/{staff_id}")
-async def delete_staff(staff_id: str):
+async def delete_staff(staff_id: str, _admin=Depends(require_admin)):
     result = await db.staff.delete_one({"id": staff_id})
     if result.deleted_count == 0: raise HTTPException(status_code=404, detail="Staff not found")
     return {"message": "Staff deleted"}
 
 @router.put("/staff/{staff_id}/change-password")
-async def change_staff_password(staff_id: str, data: ChangePasswordRequest):
+async def change_staff_password(staff_id: str, data: ChangePasswordRequest, user=Depends(get_current_user)):
+    if not (user.get('type') == 'staff' and (user.get('sub') == staff_id or user.get('role') in ADMIN_ROLES)):
+        raise HTTPException(status_code=403, detail="You can only change your own password")
     staff = await db.staff.find_one({"id": staff_id}, {"_id": 0})
     if not staff: raise HTTPException(status_code=404, detail="Staff not found")
-    if staff.get('password') != data.currentPassword:
+    if not verify_password(data.currentPassword, staff.get('password')):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    await db.staff.update_one({"id": staff_id}, {"$set": {"password": data.newPassword}})
+    await db.staff.update_one({"id": staff_id}, {"$set": {"password": hash_password(data.newPassword)}})
     return {"message": "Password updated"}
 
 # ==================== STUDENT DETAIL ====================
 
 @router.get("/students/{student_id}/detail")
-async def get_student_detail(student_id: str):
-    student = await db.students.find_one({"id": student_id}, {"_id": 0})
+async def get_student_detail(student_id: str, _staff=Depends(require_staff)):
+    student = _strip(await db.students.find_one({"id": student_id}, {"_id": 0}), 'parentPassword')
     if not student: raise HTTPException(status_code=404, detail="Student not found")
     attendance = await db.attendance.find({"studentId": student_id}, {"_id": 0}).to_list(10000)
     total_days = len(attendance)
@@ -340,17 +353,26 @@ async def get_student_detail(student_id: str):
 
 # ==================== PARENT PORTAL ====================
 
+def _require_own_student_or_staff(user: dict, student_id: str):
+    if user.get('type') == 'staff':
+        return
+    if user.get('type') == 'parent' and user.get('sub') == student_id:
+        return
+    raise HTTPException(status_code=403, detail="Not authorized to access this student's data")
+
 @router.put("/parent/{student_id}/change-password")
-async def change_parent_password(student_id: str, data: ChangePasswordRequest):
+async def change_parent_password(student_id: str, data: ChangePasswordRequest, user=Depends(get_current_user)):
+    _require_own_student_or_staff(user, student_id)
     student = await db.students.find_one({"id": student_id}, {"_id": 0})
     if not student: raise HTTPException(status_code=404, detail="Student not found")
-    if student.get('parentPassword') != data.currentPassword:
+    if not verify_password(data.currentPassword, student.get('parentPassword')):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    await db.students.update_one({"id": student_id}, {"$set": {"parentPassword": data.newPassword}})
+    await db.students.update_one({"id": student_id}, {"$set": {"parentPassword": hash_password(data.newPassword)}})
     return {"message": "Password updated"}
 
 @router.get("/parent/dashboard/{student_id}")
-async def parent_dashboard(student_id: str):
+async def parent_dashboard(student_id: str, user=Depends(get_current_user)):
+    _require_own_student_or_staff(user, student_id)
     student = await db.students.find_one({"id": student_id}, {"_id": 0})
     if not student: raise HTTPException(status_code=404, detail="Student not found")
     attendance = await db.attendance.find({"studentId": student_id}, {"_id": 0}).to_list(10000)

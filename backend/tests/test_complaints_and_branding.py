@@ -7,6 +7,22 @@ from datetime import datetime, timedelta
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 API = f"{BASE_URL}/api"
 
+_auth_state = {}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _login():
+    r = requests.post(f"{API}/auth/login", json={
+        "username": os.environ.get("SUPER_ADMIN_USERNAME", "admin"),
+        "password": os.environ.get("SUPER_ADMIN_PASSWORD", "12345678"),
+    }, timeout=15)
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    _auth_state['token'] = r.json().get("access_token")
+
+
+def _headers():
+    return {"Authorization": f"Bearer {_auth_state.get('token')}"}
+
 
 @pytest.fixture(scope="module")
 def created_ids():
@@ -15,7 +31,7 @@ def created_ids():
     # Cleanup
     for cid in ids:
         try:
-            requests.delete(f"{API}/complaints/{cid}", timeout=10)
+            requests.delete(f"{API}/complaints/{cid}", timeout=10, headers=_headers())
         except Exception:
             pass
 
@@ -47,7 +63,7 @@ class TestComplaints:
             "createdByRole": "teacher",
             "photoUrl": "data:image/png;base64,iVBORw0KGgo="
         }
-        r = requests.post(f"{API}/complaints", json=payload, timeout=15)
+        r = requests.post(f"{API}/complaints", json=payload, timeout=15, headers=_headers())
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["title"] == payload["title"]
@@ -58,7 +74,7 @@ class TestComplaints:
         created_ids.append(d["id"])
 
     def test_list_complaints_has_isOverdue(self, created_ids):
-        r = requests.get(f"{API}/complaints", timeout=15)
+        r = requests.get(f"{API}/complaints", timeout=15, headers=_headers())
         assert r.status_code == 200
         rows = r.json()
         assert isinstance(rows, list)
@@ -67,21 +83,21 @@ class TestComplaints:
             assert isinstance(rows[0]["isOverdue"], bool)
 
     def test_overdue_count_endpoint(self):
-        r = requests.get(f"{API}/complaints/overdue-count", timeout=15)
+        r = requests.get(f"{API}/complaints/overdue-count", timeout=15, headers=_headers())
         assert r.status_code == 200
         d = r.json()
         assert "overdue" in d and "pending" in d and "inProgress" in d
         assert isinstance(d["overdue"], int)
 
     def test_filter_by_status(self, created_ids):
-        r = requests.get(f"{API}/complaints?status=pending", timeout=15)
+        r = requests.get(f"{API}/complaints?status=pending", timeout=15, headers=_headers())
         assert r.status_code == 200
         rows = r.json()
         for x in rows:
             assert x["status"] == "pending"
 
     def test_filter_by_username(self, created_ids):
-        r = requests.get(f"{API}/complaints?createdByUsername=teach1", timeout=15)
+        r = requests.get(f"{API}/complaints?createdByUsername=teach1", timeout=15, headers=_headers())
         assert r.status_code == 200
         rows = r.json()
         for x in rows:
@@ -98,12 +114,12 @@ class TestComplaints:
             "createdByUsername": "admin",
             "createdByRole": "super_admin",
         }
-        r = requests.post(f"{API}/complaints", json=payload, timeout=15)
+        r = requests.post(f"{API}/complaints", json=payload, timeout=15, headers=_headers())
         assert r.status_code == 200
         cid = r.json()["id"]
         created_ids.append(cid)
         # Filter overdueOnly
-        r2 = requests.get(f"{API}/complaints?overdueOnly=true", timeout=15)
+        r2 = requests.get(f"{API}/complaints?overdueOnly=true", timeout=15, headers=_headers())
         assert r2.status_code == 200
         rows = r2.json()
         ids = [x["id"] for x in rows]
@@ -118,12 +134,12 @@ class TestComplaints:
         r = requests.post(f"{API}/complaints", json={
             "title": "TEST_status flow", "dueDate": due,
             "createdBy": "Admin", "createdByUsername": "admin", "createdByRole": "super_admin"
-        }, timeout=15)
+        }, timeout=15, headers=_headers())
         cid = r.json()["id"]
         created_ids.append(cid)
 
         # Update to in_progress
-        r2 = requests.put(f"{API}/complaints/{cid}", json={"status": "in_progress"}, timeout=15)
+        r2 = requests.put(f"{API}/complaints/{cid}", json={"status": "in_progress"}, timeout=15, headers=_headers())
         assert r2.status_code == 200
         d = r2.json()
         assert d["status"] == "in_progress"
@@ -131,14 +147,14 @@ class TestComplaints:
         assert d.get("resolvedAt") is None
 
         # Update to resolved
-        r3 = requests.put(f"{API}/complaints/{cid}", json={"status": "resolved"}, timeout=15)
+        r3 = requests.put(f"{API}/complaints/{cid}", json={"status": "resolved"}, timeout=15, headers=_headers())
         assert r3.status_code == 200
         d3 = r3.json()
         assert d3["status"] == "resolved"
         assert d3.get("resolvedAt") is not None
 
         # GET to verify persistence
-        r4 = requests.get(f"{API}/complaints", timeout=15)
+        r4 = requests.get(f"{API}/complaints", timeout=15, headers=_headers())
         rows = r4.json()
         match = next((x for x in rows if x["id"] == cid), None)
         assert match is not None
@@ -151,16 +167,16 @@ class TestComplaints:
         r = requests.post(f"{API}/complaints", json={
             "title": "TEST_delete me", "dueDate": due,
             "createdBy": "Admin", "createdByUsername": "admin", "createdByRole": "super_admin"
-        }, timeout=15)
+        }, timeout=15, headers=_headers())
         cid = r.json()["id"]
-        r2 = requests.delete(f"{API}/complaints/{cid}", timeout=15)
+        r2 = requests.delete(f"{API}/complaints/{cid}", timeout=15, headers=_headers())
         assert r2.status_code == 200
         # Confirm gone
-        r3 = requests.get(f"{API}/complaints", timeout=15)
+        r3 = requests.get(f"{API}/complaints", timeout=15, headers=_headers())
         ids = [x["id"] for x in r3.json()]
         assert cid not in ids
         # Delete again -> 404
-        r4 = requests.delete(f"{API}/complaints/{cid}", timeout=15)
+        r4 = requests.delete(f"{API}/complaints/{cid}", timeout=15, headers=_headers())
         assert r4.status_code == 404
 
 
@@ -173,7 +189,7 @@ class TestInvoicePDF:
         for delta in range(0, 365):
             candidates.append((datetime.now() - timedelta(days=delta)).strftime('%Y-%m-%d'))
         for d in candidates:
-            r = requests.get(f"{API}/fees/day-sheet?date={d}", timeout=15)
+            r = requests.get(f"{API}/fees/day-sheet?date={d}", timeout=15, headers=_headers())
             if r.status_code == 200:
                 payments = r.json().get("payments", [])
                 if payments:
