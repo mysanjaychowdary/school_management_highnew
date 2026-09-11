@@ -46,8 +46,10 @@ const StudentDetail = () => {
       {/* Student Info */}
       <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-6">
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 bg-gradient-to-br from-sky-400 to-sky-600 rounded-2xl flex items-center justify-center">
-            <User className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-gradient-to-br from-sky-400 to-sky-600 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0">
+            {student.photoUrl
+              ? <img src={student.photoUrl} alt={student.studentName} className="w-full h-full object-cover" />
+              : <User className="w-8 h-8 text-white" />}
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: 'Nunito' }}>{student.studentName}</h1>

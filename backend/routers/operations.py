@@ -16,7 +16,7 @@ from models import *
 from services.whatsapp import *
 from services.sms import *
 from services.pdf import *
-from security import hash_password, verify_password, require_admin, require_staff, get_current_user, ADMIN_ROLES
+from security import hash_password, verify_password, require_admin, require_staff, require_superadmin, get_current_user, ADMIN_ROLES
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -116,6 +116,17 @@ async def get_enabled_modules():
 async def update_enabled_modules(data: EnabledModulesSettings, _admin=Depends(require_admin)):
     await db.settings.update_one({"type": "enabled_modules"}, {"$set": {"disabledModules": data.disabledModules}}, upsert=True)
     return {"message": "Feature toggles updated"}
+
+@router.get("/settings/attendance-mode")
+async def get_attendance_mode():
+    settings = await db.settings.find_one({"type": "attendance_mode"}, {"_id": 0})
+    if not settings: return {"sessionAttendance": False}
+    return settings
+
+@router.put("/settings/attendance-mode")
+async def update_attendance_mode(data: AttendanceModeSettings, _admin=Depends(require_superadmin)):
+    await db.settings.update_one({"type": "attendance_mode"}, {"$set": {"sessionAttendance": data.sessionAttendance}}, upsert=True)
+    return {"message": "Attendance mode updated"}
 
 @router.get("/settings/whatsapp-templates")
 async def get_whatsapp_templates(_admin=Depends(require_admin)):
@@ -380,7 +391,15 @@ async def parent_dashboard(student_id: str, user=Depends(get_current_user)):
     present_days = sum(1 for a in attendance if a['status'] == 'present')
     absent_days = sum(1 for a in attendance if a['status'] == 'absent')
     payments = await db.fee_payments.find({"studentId": student_id}, {"_id": 0}).to_list(100)
-    events = await db.events.find({}, {"_id": 0}).to_list(100)
+    s_class = student.get('studentClass', '')
+    s_section = student.get('section', '')
+    events = await db.events.find({
+        "$or": [
+            {"targetClass": {"$in": [None, ""]}},
+            {"targetClass": s_class, "targetSection": {"$in": [None, ""]}},
+            {"targetClass": s_class, "targetSection": s_section},
+        ]
+    }, {"_id": 0}).to_list(100)
     homework_cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     homework = await db.homework.find({"studentClass": student.get('studentClass', ''), "section": student.get('section', ''), "createdAt": {"$gte": homework_cutoff}}, {"_id": 0}).to_list(100)
     # Fallback: if createdAt is stored as ISO string, also get by dueDate

@@ -11,16 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog';
 
 const Attendance = () => {
-  const { role, perms } = useAuth();
+  const { role, perms, sessionAttendance } = useAuth();
   const showExport = canExport(perms);
   const [activeTab, setActiveTab] = useState('take');
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [takeAttendance, setTakeAttendance] = useState({ studentClass: '', section: '', date: new Date().toISOString().split('T')[0] });
+  const [takeAttendance, setTakeAttendance] = useState({ studentClass: '', section: '', date: new Date().toISOString().split('T')[0], session: 'morning' });
   const [attendanceData, setAttendanceData] = useState([]);
-  const [viewFilters, setViewFilters] = useState({ studentClass: '', section: '', startDate: '', endDate: '' });
+  const [viewFilters, setViewFilters] = useState({ studentClass: '', section: '', startDate: '', endDate: '', session: '' });
   const [showConfirmSave, setShowConfirmSave] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -38,7 +38,7 @@ const Attendance = () => {
       // Fetch students AND existing attendance for this date in parallel
       const [studentsResp, attendanceResp] = await Promise.all([
         api.getStudents({ studentClass: takeAttendance.studentClass, section: takeAttendance.section, limit: 1000 }),
-        api.getAttendance({ studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date }),
+        api.getAttendance({ studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date, ...(sessionAttendance ? { session: takeAttendance.session } : {}) }),
       ]);
       // Backend returns paginated { students, total, ... } — fall back to array for compat
       const studentsList = Array.isArray(studentsResp.data) ? studentsResp.data : (studentsResp.data?.students || []);
@@ -68,10 +68,11 @@ const Attendance = () => {
   const handleSubmitAttendance = async () => {
     try {
       setSaving(true);
-      await api.markAttendance({ studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date, records: attendanceData });
+      const session = sessionAttendance ? takeAttendance.session : null;
+      await api.markAttendance({ studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date, records: attendanceData, session });
       const absentRecords = attendanceData.filter((r) => r.status === 'absent');
       if (absentRecords.length > 0) {
-        await api.sendAttendanceAlerts({ absentRecords: absentRecords.map((r) => ({ ...r, studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date })) });
+        await api.sendAttendanceAlerts({ absentRecords: absentRecords.map((r) => ({ ...r, studentClass: takeAttendance.studentClass, section: takeAttendance.section, date: takeAttendance.date, session })) });
       }
       toast.success('Attendance marked successfully');
       setShowConfirmSave(false);
@@ -87,6 +88,7 @@ const Attendance = () => {
       const params = { studentClass: viewFilters.studentClass, section: viewFilters.section };
       if (viewFilters.startDate) params.startDate = viewFilters.startDate;
       if (viewFilters.endDate) params.endDate = viewFilters.endDate;
+      if (sessionAttendance && viewFilters.session) params.session = viewFilters.session;
       const response = await api.getAttendance(params);
       const records = Array.isArray(response.data) ? response.data : [];
       setAttendanceRecords(records);
@@ -118,22 +120,29 @@ const Attendance = () => {
     }
   };
 
-  // Build student-wise summary for view
+  // Build student-wise summary for view. When both sessions are mixed in (no session
+  // filter applied), morning/afternoon share a date, so columns are keyed by date+session
+  // to avoid one session's mark silently overwriting the other's in the same cell.
   const getStudentSummary = () => {
     const stats = {};
-    const dateSet = new Set();
+    const colSet = new Set();
     attendanceRecords.forEach((r) => {
       const roll = String(r.rollNo ?? '');
-      dateSet.add(r.date);
+      const col = r.session ? `${r.date}|${r.session}` : r.date;
+      colSet.add(col);
       if (!stats[roll]) stats[roll] = { name: r.studentName, rollNo: roll, total: 0, present: 0, absent: 0, holiday: 0, records: {} };
       stats[roll].total++;
       if (r.status === 'present') stats[roll].present++;
       else if (r.status === 'absent') stats[roll].absent++;
       else if (r.status === 'holiday') stats[roll].holiday++;
-      stats[roll].records[r.date] = r.status;
+      stats[roll].records[col] = r.status;
     });
-    const dates = Array.from(dateSet).sort();
+    const dates = Array.from(colSet).sort();
     return { students: Object.values(stats).sort((a, b) => String(a.rollNo).localeCompare(String(b.rollNo), undefined, { numeric: true })), dates };
+  };
+  const parseCol = (col) => {
+    const [date, session] = col.split('|');
+    return { date, session };
   };
 
   // Count stats for take attendance
@@ -163,7 +172,7 @@ const Attendance = () => {
         <TabsContent value="take" className="space-y-6">
           <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-4 sm:p-6">
             <h2 className="text-lg font-bold text-slate-800 mb-4">Select Class & Date</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${sessionAttendance ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
               <div>
                 <Label>Class *</Label>
                 <Select value={takeAttendance.studentClass} onValueChange={(v) => setTakeAttendance({ ...takeAttendance, studentClass: v, section: '' })}>
@@ -182,6 +191,18 @@ const Attendance = () => {
                 <Label>Date *</Label>
                 <Input type="date" data-testid="attendance-date-input" value={takeAttendance.date} onChange={(e) => setTakeAttendance({ ...takeAttendance, date: e.target.value })} className="rounded-xl h-12" />
               </div>
+              {sessionAttendance && (
+                <div>
+                  <Label>Session *</Label>
+                  <Select value={takeAttendance.session} onValueChange={(v) => setTakeAttendance({ ...takeAttendance, session: v })}>
+                    <SelectTrigger data-testid="attendance-session-select" className="rounded-xl h-12"><SelectValue placeholder="Select Session" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="morning">Morning</SelectItem>
+                      <SelectItem value="afternoon">Afternoon</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex items-end">
                 <Button data-testid="load-students-btn" onClick={handleLoadStudents} className="bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl h-12 w-full active:scale-95 transition-transform">Load Students</Button>
               </div>
@@ -258,13 +279,13 @@ const Attendance = () => {
               <AlertDialog open={showConfirmSave} onOpenChange={(o) => { if (!saving) setShowConfirmSave(o); }}>
                 <AlertDialogContent data-testid="confirm-save-attendance">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Save attendance for {takeAttendance.date}?</AlertDialogTitle>
+                    <AlertDialogTitle>Save attendance for {takeAttendance.date}{sessionAttendance ? ` (${takeAttendance.session === 'morning' ? 'Morning' : 'Afternoon'} session)` : ''}?</AlertDialogTitle>
                     <AlertDialogDescription>
                       Class {takeAttendance.studentClass} - Section {takeAttendance.section} · {attendanceData.length} students<br />
                       <span className="inline-flex items-center gap-1.5 mt-2 mr-3 text-emerald-700 font-semibold">{presentCount} Present</span>
                       <span className="inline-flex items-center gap-1.5 mr-3 text-rose-700 font-semibold">{absentCount} Absent</span>
                       <span className="inline-flex items-center gap-1.5 text-orange-700 font-semibold">{holidayCount} Holiday</span>
-                      {absentCount > 0 && <><br /><span className="text-amber-700 font-medium mt-1 inline-block">Alerts will be sent to parents of {absentCount} absent student{absentCount > 1 ? 's' : ''}.</span></>}
+                      {absentCount > 0 && <><br /><span className="text-amber-700 font-medium mt-1 inline-block">Alerts will be sent to parents of {absentCount} absent student{absentCount > 1 ? 's' : ''}{sessionAttendance ? ` for the ${takeAttendance.session} session` : ''}.</span></>}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -283,7 +304,7 @@ const Attendance = () => {
         <TabsContent value="view" className="space-y-6">
           <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-4 sm:p-6">
             <h2 className="text-lg font-bold text-slate-800 mb-4">Filters</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${sessionAttendance ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
               <div>
                 <Label>Class *</Label>
                 <Select value={viewFilters.studentClass} onValueChange={(v) => setViewFilters({ ...viewFilters, studentClass: v, section: '' })}>
@@ -300,6 +321,19 @@ const Attendance = () => {
               </div>
               <div><Label>Start Date <span className="text-slate-400 font-normal">(optional)</span></Label><Input data-testid="view-start-date" type="date" value={viewFilters.startDate} onChange={(e) => setViewFilters({ ...viewFilters, startDate: e.target.value })} className="rounded-xl h-12" /></div>
               <div><Label>End Date <span className="text-slate-400 font-normal">(optional)</span></Label><Input data-testid="view-end-date" type="date" value={viewFilters.endDate} onChange={(e) => setViewFilters({ ...viewFilters, endDate: e.target.value })} className="rounded-xl h-12" /></div>
+              {sessionAttendance && (
+                <div>
+                  <Label>Session <span className="text-slate-400 font-normal">(optional)</span></Label>
+                  <Select value={viewFilters.session || 'all'} onValueChange={(v) => setViewFilters({ ...viewFilters, session: v === 'all' ? '' : v })}>
+                    <SelectTrigger className="rounded-xl h-12"><SelectValue placeholder="All Sessions" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sessions</SelectItem>
+                      <SelectItem value="morning">Morning</SelectItem>
+                      <SelectItem value="afternoon">Afternoon</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-2">Tip: Leave dates blank to view all attendance for the selected class & section.</p>
             <div className="flex flex-col sm:flex-row justify-between mt-4 gap-3">
@@ -347,9 +381,12 @@ const Attendance = () => {
                           <th className="px-2 py-3 text-center font-bold uppercase text-[11px] text-emerald-600 border-r border-slate-200"><CheckCircle className="w-4 h-4 inline" /></th>
                           <th className="px-2 py-3 text-center font-bold uppercase text-[11px] text-rose-600 border-r border-slate-200"><XCircle className="w-4 h-4 inline" /></th>
                           <th className="px-2 py-3 text-center font-bold uppercase text-[11px] text-slate-600 border-r border-slate-200">%</th>
-                          {dates.map((d) => (
-                            <th key={d} className="px-1 py-3 text-center font-bold text-[10px] text-slate-500 whitespace-nowrap border-r border-slate-200 last:border-r-0">{d.slice(8)}<br /><span className="font-normal text-[9px] text-slate-400">{d.slice(5, 7)}</span></th>
-                          ))}
+                          {dates.map((d) => {
+                            const { date, session } = parseCol(d);
+                            return (
+                              <th key={d} className="px-1 py-3 text-center font-bold text-[10px] text-slate-500 whitespace-nowrap border-r border-slate-200 last:border-r-0">{date.slice(8)}<br /><span className="font-normal text-[9px] text-slate-400">{date.slice(5, 7)}{session ? ` ${session === 'morning' ? 'AM' : 'PM'}` : ''}</span></th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
@@ -367,11 +404,12 @@ const Attendance = () => {
                               </td>
                               {dates.map((d) => {
                                 const s = st.records[d];
+                                const { date, session } = parseCol(d);
                                 const cellCls = s === 'present' ? 'bg-emerald-500 text-white' : s === 'absent' ? 'bg-rose-500 text-white' : s === 'holiday' ? 'bg-orange-400 text-white' : 'bg-slate-50 text-slate-300';
                                 const letter = s === 'present' ? 'P' : s === 'absent' ? 'A' : s === 'holiday' ? 'H' : '-';
                                 return (
                                   <td key={d} className="px-1 py-2 text-center border-r border-slate-200 last:border-r-0">
-                                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-xs font-extrabold ${cellCls}`} title={`${d}: ${s || 'no record'}`}>{letter}</span>
+                                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-xs font-extrabold ${cellCls}`} title={`${date}${session ? ` (${session})` : ''}: ${s || 'no record'}`}>{letter}</span>
                                   </td>
                                 );
                               })}

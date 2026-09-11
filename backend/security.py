@@ -97,3 +97,4 @@ async def require_staff(authorization: Optional[str] = Header(None)) -> dict:
 
 
 require_admin = require_roles(*ADMIN_ROLES)
+require_superadmin = require_roles("super_admin")

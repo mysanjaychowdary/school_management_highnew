@@ -49,11 +49,19 @@ export const AuthProvider = ({ children }) => {
   const [impersonating, setImpersonating] = useState(false);
   const [adminSession, setAdminSession] = useState(null);
   const [disabledModules, setDisabledModules] = useState([]);
+  const [sessionAttendance, setSessionAttendance] = useState(false);
 
   const refreshDisabledModules = useCallback(async () => {
     try {
       const r = await api.getEnabledModules();
       setDisabledModules(r.data?.disabledModules || []);
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  const refreshAttendanceMode = useCallback(async () => {
+    try {
+      const r = await api.getAttendanceMode();
+      setSessionAttendance(!!r.data?.sessionAttendance);
     } catch (e) { /* ignore */ }
   }, []);
 
@@ -69,8 +77,8 @@ export const AuthProvider = ({ children }) => {
         setAdminSession(d.adminSession || null);
       } catch (e) { /* ignore */ }
     }
-    refreshDisabledModules().finally(() => setLoaded(true));
-  }, [refreshDisabledModules]);
+    Promise.all([refreshDisabledModules(), refreshAttendanceMode()]).finally(() => setLoaded(true));
+  }, [refreshDisabledModules, refreshAttendanceMode]);
 
   const persist = (userData, roleName, p, impersonatingFlag, adminSessionData) => {
     localStorage.setItem('schoolpro_auth', JSON.stringify({ user: userData, role: roleName, perms: p, impersonating: impersonatingFlag, adminSession: adminSessionData }));
@@ -109,7 +117,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, perms, login, logout, loaded, impersonating, adminSession, impersonateStaff, returnToAdmin, disabledModules, refreshDisabledModules }}>
+    <AuthContext.Provider value={{ user, role, perms, login, logout, loaded, impersonating, adminSession, impersonateStaff, returnToAdmin, disabledModules, refreshDisabledModules, sessionAttendance, refreshAttendanceMode }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Upload, Download, Search, Edit, Trash2, TrendingUp, Filter, Eye, ArrowRight, Settings as SettingsIcon, Check, X } from 'lucide-react';
+import { Plus, Upload, Download, Search, Edit, Trash2, TrendingUp, Filter, Eye, ArrowRight, Settings as SettingsIcon, Check, X, Camera } from 'lucide-react';
 import { useAuth, canEdit, canExport, canSeeFullMobile, maskMobile } from '../lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -33,8 +33,13 @@ const Students = () => {
     studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '',
     fatherName: '', motherName: '', mobile: '', address: '',
     feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '',
-    customFields: {}, customFeeValues: {},
+    photoUrl: '', customFields: {}, customFeeValues: {},
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPhotoDialog, setShowPhotoDialog] = useState(false);
+  const [bulkPhotoBusy, setBulkPhotoBusy] = useState(false);
+  const [bulkPhotoProgress, setBulkPhotoProgress] = useState({ phase: 'prep', done: 0, total: 0 });
+  const [bulkPhotoResult, setBulkPhotoResult] = useState(null);
   const [customFieldDefs, setCustomFieldDefs] = useState([]);
   const [showFieldsDialog, setShowFieldsDialog] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState('');
@@ -94,6 +99,81 @@ const Students = () => {
   const updateCustomFeeValue = useCallback((key, value) => {
     setFormData(prev => ({ ...prev, customFeeValues: { ...prev.customFeeValues, [key]: value } }));
   }, []);
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error('Photo must be under 5 MB'); return; }
+    try {
+      setUploadingPhoto(true);
+      const r = await api.uploadFile(file);
+      setFormData(prev => ({ ...prev, photoUrl: r.data.url }));
+      toast.success('Photo uploaded');
+    } catch (error) { toast.error('Failed to upload photo'); }
+    finally { setUploadingPhoto(false); }
+  };
+
+  // Shrink an image file in the browser to a small JPEG data URI before upload
+  const compressImageFile = (file, maxDim = 512, quality = 0.8) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode failed'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else if (height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleBulkPhotos = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setBulkPhotoBusy(true);
+    setBulkPhotoResult(null);
+    setBulkPhotoProgress({ phase: 'prep', done: 0, total: files.length });
+    const items = [];
+    const skipped = [];
+    for (const file of files) {
+      const studentCode = file.name.replace(/\.[^.]+$/, '').trim();
+      try {
+        const photoUrl = await compressImageFile(file);
+        items.push({ studentCode, photoUrl });
+      } catch (err) {
+        skipped.push(`${file.name}: could not read image`);
+      }
+      setBulkPhotoProgress((p) => ({ ...p, done: p.done + 1 }));
+    }
+    let updated = 0;
+    const errors = [...skipped];
+    const BATCH = 12;
+    setBulkPhotoProgress({ phase: 'upload', done: 0, total: items.length });
+    try {
+      for (let i = 0; i < items.length; i += BATCH) {
+        const res = await api.bulkUploadStudentPhotos(items.slice(i, i + BATCH));
+        updated += res.data.updated;
+        errors.push(...(res.data.errors || []));
+        setBulkPhotoProgress({ phase: 'upload', done: Math.min(i + BATCH, items.length), total: items.length });
+      }
+      setBulkPhotoResult({ updated, errors });
+      if (updated > 0) { toast.success(`${updated} photo(s) attached`); loadStudents(); }
+      if (updated === 0 && errors.length > 0) toast.error('No photos matched a Student ID');
+    } catch (err) {
+      toast.error('Bulk photo upload failed');
+      setBulkPhotoResult({ updated, errors: [...errors, 'Upload interrupted — some photos may not have saved'] });
+    } finally {
+      setBulkPhotoBusy(false);
+    }
+  };
 
   const parsedFeeValues = (values) => Object.fromEntries(Object.entries(values || {}).map(([k, v]) => [k, parseFloat(v) || 0]));
 
@@ -230,7 +310,7 @@ const Students = () => {
   };
 
   const resetForm = () => {
-    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '', customFields: {}, customFeeValues: {} });
+    setFormData({ studentCode: '', studentName: '', rollNo: '', studentClass: '', section: '', fatherName: '', motherName: '', mobile: '', address: '', feeTerm1: '', feeTerm2: '', feeTerm3: '', parentUsername: '', parentPassword: '', photoUrl: '', customFields: {}, customFeeValues: {} });
   };
 
   const openEditDialog = async (student) => {
@@ -251,6 +331,7 @@ const Students = () => {
       mobile: student.mobile, address: student.address,
       feeTerm1: student.feeTerm1, feeTerm2: student.feeTerm2, feeTerm3: student.feeTerm3,
       parentUsername: student.parentUsername || '', parentPassword: student.parentPassword || '',
+      photoUrl: student.photoUrl || '',
       customFields: { ...(student.customFields || {}) },
       customFeeValues,
     });
@@ -288,6 +369,28 @@ const Students = () => {
   // Inline form fields rendered directly (NOT as a sub-component to avoid focus loss)
   const renderFormFields = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="md:col-span-2">
+        <Label>Student Photo</Label>
+        <div className="flex items-center gap-4 mt-1">
+          <div className="w-20 h-24 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {formData.photoUrl
+              ? <img src={formData.photoUrl} alt="student" className="w-full h-full object-cover" />
+              : <Camera className="w-6 h-6 text-slate-300" />}
+          </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="student-photo-file" className="cursor-pointer">
+              <input id="student-photo-file" type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" data-testid="student-photo-input" />
+              <span className="inline-flex items-center px-4 py-2 rounded-xl font-bold text-sm bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors">
+                <Camera className="w-4 h-4 mr-2" />{uploadingPhoto ? 'Uploading...' : (formData.photoUrl ? 'Replace Photo' : 'Upload Photo')}
+              </span>
+            </label>
+            {formData.photoUrl && (
+              <button type="button" onClick={() => updateField('photoUrl', '')} className="text-xs font-bold text-rose-600 hover:underline text-left">Remove photo</button>
+            )}
+            <p className="text-xs text-slate-400">Shown on the student's progress card. JPG/PNG, under 5 MB.</p>
+          </div>
+        </div>
+      </div>
       <div><Label>Student ID * (Unique)</Label><Input data-testid="student-code-input" required value={formData.studentCode} onChange={(e) => updateField('studentCode', e.target.value)} className="rounded-xl h-12" placeholder="e.g., ADM001" /></div>
       <div><Label>Student Name *</Label><Input data-testid="student-name-input" required value={formData.studentName} onChange={(e) => updateField('studentName', e.target.value)} className="rounded-xl h-12" /></div>
       <div><Label>Roll No *</Label><Input data-testid="student-rollno-input" required value={formData.rollNo} onChange={(e) => updateField('rollNo', e.target.value)} className="rounded-xl h-12" placeholder="Class roll number" /></div>
@@ -373,6 +476,8 @@ const Students = () => {
           </label>}
 
           {showExport && <Button data-testid="download-sample-csv" onClick={handleDownloadSample} variant="outline" className="font-bold rounded-xl"><Download className="w-5 h-5 mr-2" />Sample CSV</Button>}
+
+          {showEdit && <Button data-testid="bulk-photos-btn" onClick={() => { setBulkPhotoResult(null); setShowPhotoDialog(true); }} variant="outline" className="font-bold rounded-xl bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 border-fuchsia-200"><Camera className="w-5 h-5 mr-2" />Bulk Photos</Button>}
 
           {(role === 'super_admin' || role === 'main_admin') && (
             <Button data-testid="manage-fields-btn" onClick={() => setShowFieldsDialog(true)} variant="outline" className="font-bold rounded-xl bg-violet-50 text-violet-700 hover:bg-violet-100 border-violet-200">
@@ -523,7 +628,14 @@ const Students = () => {
                     <TableCell><input type="checkbox" checked={selectedIds.includes(student.id)} onChange={() => toggleSelect(student.id)} className="w-4 h-4 rounded accent-sky-500" /></TableCell>
                     <TableCell className="font-semibold text-slate-900">{student.studentCode}</TableCell>
                     <TableCell className="text-slate-700">{student.rollNo}</TableCell>
-                    <TableCell className="font-medium text-slate-700">{student.studentName}</TableCell>
+                    <TableCell className="font-medium text-slate-700">
+                      <div className="flex items-center gap-2">
+                        {student.photoUrl
+                          ? <img src={student.photoUrl} alt={student.studentName} className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0" />
+                          : <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center flex-shrink-0">{(student.studentName || '?').charAt(0).toUpperCase()}</span>}
+                        <span>{student.studentName}</span>
+                      </div>
+                    </TableCell>
                     <TableCell><span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700">{student.studentClass}</span></TableCell>
                     <TableCell><span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">{student.section}</span></TableCell>
                     <TableCell className="text-slate-600">{showFullMobile ? student.mobile : maskMobile(student.mobile)}</TableCell>
@@ -625,6 +737,58 @@ const Students = () => {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Photo Upload Dialog */}
+      <Dialog open={showPhotoDialog} onOpenChange={(open) => { if (!bulkPhotoBusy) { setShowPhotoDialog(open); if (!open) setBulkPhotoResult(null); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="text-2xl font-bold">Bulk Upload Photos</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 text-sm text-sky-900">
+              <p className="font-bold mb-1">How it works</p>
+              <ul className="list-disc ml-5 space-y-0.5">
+                <li>Name each image file after the student's <b>Student ID</b> — e.g. <code className="bg-white px-1 rounded">ADM001.jpg</code></li>
+                <li>Select all the photos at once (JPG or PNG). They're resized in your browser before upload.</li>
+                <li>Existing photos for matched students are replaced.</li>
+              </ul>
+            </div>
+
+            <label htmlFor="bulk-photos-input" className={`cursor-pointer block ${bulkPhotoBusy ? 'pointer-events-none opacity-60' : ''}`}>
+              <input id="bulk-photos-input" type="file" accept="image/*" multiple onChange={handleBulkPhotos} className="hidden" data-testid="bulk-photos-input" />
+              <div className="inline-flex w-full items-center justify-center px-4 py-3 bg-fuchsia-500 hover:bg-fuchsia-600 text-white font-bold rounded-xl transition-colors">
+                <Camera className="w-5 h-5 mr-2" />{bulkPhotoBusy ? 'Working…' : 'Select Photos'}
+              </div>
+            </label>
+
+            {bulkPhotoBusy && (
+              <div className="space-y-2">
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-fuchsia-500 transition-all" style={{ width: `${bulkPhotoProgress.total ? (bulkPhotoProgress.done / bulkPhotoProgress.total) * 100 : 0}%` }} />
+                </div>
+                <p className="text-xs font-medium text-slate-500">{bulkPhotoProgress.phase === 'prep' ? 'Preparing' : 'Uploading'} {bulkPhotoProgress.done} / {bulkPhotoProgress.total} images…</p>
+              </div>
+            )}
+
+            {bulkPhotoResult && (
+              <div className="space-y-2">
+                <p className="font-bold text-emerald-700" data-testid="bulk-photos-updated">{bulkPhotoResult.updated} photo(s) attached</p>
+                {bulkPhotoResult.errors.length > 0 && (
+                  <div className="border border-rose-200 bg-rose-50 rounded-xl p-3 max-h-48 overflow-y-auto">
+                    <p className="text-xs font-bold text-rose-700 mb-1">{bulkPhotoResult.errors.length} skipped</p>
+                    <ul className="text-xs text-rose-600 space-y-0.5 list-disc ml-4">
+                      {bulkPhotoResult.errors.slice(0, 50).map((err, i) => <li key={i}>{err}</li>)}
+                      {bulkPhotoResult.errors.length > 50 && <li>…and {bulkPhotoResult.errors.length - 50} more</li>}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button type="button" variant="outline" disabled={bulkPhotoBusy} onClick={() => { setShowPhotoDialog(false); setBulkPhotoResult(null); }} className="rounded-xl">Close</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

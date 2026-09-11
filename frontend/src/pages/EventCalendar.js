@@ -7,14 +7,18 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+
+const BLANK_FORM = { title: '', description: '', date: new Date().toISOString().split('T')[0], sendNotification: false, attachmentUrl: '', attachmentName: '', targetClass: '', targetSection: '' };
 
 const EventCalendar = () => {
   const { role, perms } = useAuth();
   const showEdit = canEdit(perms, 'calendar');
   const [events, setEvents] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', date: new Date().toISOString().split('T')[0], sendNotification: false, attachmentUrl: '', attachmentName: '' });
+  const [form, setForm] = useState(BLANK_FORM);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const loadEvents = useCallback(async () => {
@@ -24,6 +28,9 @@ const EventCalendar = () => {
   }, [selectedMonth]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
+  useEffect(() => { api.getClasses().then((r) => setClasses(r.data)).catch(() => {}); }, []);
+
+  const getSections = (cls) => { const f = classes.find((c) => c.className === cls); return f ? f.sections : []; };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,7 +38,7 @@ const EventCalendar = () => {
       await api.createEvent(form);
       toast.success('Event added');
       setShowDialog(false);
-      setForm({ title: '', description: '', date: new Date().toISOString().split('T')[0], sendNotification: false, attachmentUrl: '', attachmentName: '' });
+      setForm(BLANK_FORM);
       loadEvents();
     } catch (error) { toast.error('Failed to add event'); }
   };
@@ -61,6 +68,11 @@ const EventCalendar = () => {
 
   const monthName = new Date(selectedMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 
+  const targetLabel = (ev) => {
+    if (!ev.targetClass) return 'All Classes';
+    return `Class ${ev.targetClass}${ev.targetSection ? ` - ${ev.targetSection}` : ''}`;
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -79,10 +91,33 @@ const EventCalendar = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div><Label>Title *</Label><Input data-testid="event-title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="rounded-xl h-12" placeholder="Event title" /></div>
                 <div><Label>Date *</Label><Input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="rounded-xl h-12" /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Class</Label>
+                    <Select value={form.targetClass || '_all'} onValueChange={(v) => setForm({ ...form, targetClass: v === '_all' ? '' : v, targetSection: '' })}>
+                      <SelectTrigger data-testid="event-class" className="rounded-xl h-12"><SelectValue placeholder="All Classes" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All Classes</SelectItem>
+                        {classes.map((c) => <SelectItem key={c.className} value={c.className}>Class {c.className}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Section</Label>
+                    <Select value={form.targetSection || '_all'} onValueChange={(v) => setForm({ ...form, targetSection: v === '_all' ? '' : v })} disabled={!form.targetClass}>
+                      <SelectTrigger data-testid="event-section" className="rounded-xl h-12"><SelectValue placeholder="All Sections" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All Sections</SelectItem>
+                        {getSections(form.targetClass).map((s) => <SelectItem key={s} value={s}>Section {s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="col-span-2 text-xs text-slate-500 -mt-1">Leave as "All Classes" to show this event to everyone. Otherwise it shows only to the selected class/section — in staff and parent logins.</p>
+                </div>
                 <div><Label>Description *</Label><textarea required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border border-slate-200 rounded-xl p-3 min-h-[100px] focus:ring-2 focus:ring-sky-500 focus:border-sky-500" placeholder="Event details..." /></div>
                 <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                   <input type="checkbox" id="sendNotif" checked={form.sendNotification} onChange={(e) => setForm({ ...form, sendNotification: e.target.checked })} className="w-5 h-5 rounded accent-amber-500" />
-                  <label htmlFor="sendNotif" className="font-bold text-amber-800 cursor-pointer">Send notification to all parents</label>
+                  <label htmlFor="sendNotif" className="font-bold text-amber-800 cursor-pointer">Send notification to {form.targetClass ? `Class ${form.targetClass}${form.targetSection ? ` - ${form.targetSection}` : ''} parents` : 'all parents'}</label>
                 </div>
                 <div>
                   <Label>Attachment (Optional - PDF/Image)</Label>
@@ -126,7 +161,7 @@ const EventCalendar = () => {
                   <>
                     <p className={`text-sm font-bold ${isToday ? 'text-sky-600' : 'text-slate-700'}`}>{day}</p>
                     {dayEvents.map((ev) => (
-                      <div key={ev.id} className="mt-1 px-2 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold truncate" title={ev.title}>
+                      <div key={ev.id} className={`mt-1 px-2 py-1 rounded-lg text-xs font-bold truncate ${ev.targetClass ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`} title={`${ev.title} — ${targetLabel(ev)}`}>
                         {ev.title}
                       </div>
                     ))}
@@ -153,7 +188,10 @@ const EventCalendar = () => {
                     <p className="text-xl font-extrabold leading-none">{new Date(event.date + 'T00:00:00').getDate()}</p>
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-900 text-lg">{event.title}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-lg">{event.title}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${event.targetClass ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>{targetLabel(event)}</span>
+                    </div>
                     <p className="text-sm text-slate-600 mt-1">{event.description}</p>
                   </div>
                 </div>

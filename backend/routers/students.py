@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 RESERVED_STUDENT_KEYS = {
     "id", "studentCode", "studentName", "rollNo", "studentClass", "section",
     "fatherName", "motherName", "mobile", "address", "feeTerm1", "feeTerm2", "feeTerm3",
-    "parentUsername", "parentPassword", "customFields", "createdAt",
+    "photoUrl", "parentUsername", "parentPassword", "customFields", "createdAt",
 }
 
 def _slugify_field_key(label: str) -> str:
@@ -163,6 +163,33 @@ async def bulk_upload_students(file: UploadFile = File(...), _staff=Depends(requ
         return {"added": added, "errors": errors}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/students/photos-bulk")
+async def bulk_upload_student_photos(data: StudentPhotosBulk, _staff=Depends(require_staff)):
+    """Attach photos to many students at once. Each item pairs a Student ID (admission code)
+    with an already-compressed data:image/... URI. The frontend sends these in small batches."""
+    if len(data.photos) > 100:
+        raise HTTPException(status_code=400, detail="Send at most 100 photos per request")
+    updated, errors = 0, []
+    for item in data.photos:
+        code = (item.studentCode or "").strip()
+        if not code:
+            continue
+        if not item.photoUrl.startswith("data:image/"):
+            errors.append(f"{code}: not an image file")
+            continue
+        if len(item.photoUrl) > 3_000_000:
+            errors.append(f"{code}: image too large (compress or resize it)")
+            continue
+        res = await db.students.update_one(
+            {"studentCode": {"$regex": f"^{re.escape(code)}$", "$options": "i"}},
+            {"$set": {"photoUrl": item.photoUrl}},
+        )
+        if res.matched_count == 0:
+            errors.append(f"{code}: no student with this Student ID")
+        else:
+            updated += 1
+    return {"updated": updated, "errors": errors}
 
 @router.get("/students/sample-csv")
 async def download_sample_csv():

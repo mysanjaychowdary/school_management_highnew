@@ -51,6 +51,7 @@ export const api = {
     return axios.post(`${API}/students/bulk`, formData);
   },
   getSampleCSV: () => axios.get(`${API}/students/sample-csv`, { responseType: 'blob' }),
+  bulkUploadStudentPhotos: (photos) => axios.post(`${API}/students/photos-bulk`, { photos }),
   updateStudent: (id, data) => axios.put(`${API}/students/${id}`, data),
   deleteStudent: (id) => axios.delete(`${API}/students/${id}`),
   bulkDeleteStudents: (studentIds) => axios.post(`${API}/students/bulk-delete`, { studentIds }),
@@ -87,6 +88,8 @@ export const api = {
   getSchoolSettings: () => axios.get(`${API}/settings/school`),
   getEnabledModules: () => axios.get(`${API}/settings/enabled-modules`),
   updateEnabledModules: (data) => axios.put(`${API}/settings/enabled-modules`, data),
+  getAttendanceMode: () => axios.get(`${API}/settings/attendance-mode`),
+  updateAttendanceMode: (data) => axios.put(`${API}/settings/attendance-mode`, data),
   updateSchoolSettings: (data) => axios.put(`${API}/settings/school`, data),
   getWhatsAppTemplates: () => axios.get(`${API}/settings/whatsapp-templates`),
   updateWhatsAppTemplates: (data) => axios.put(`${API}/settings/whatsapp-templates`, data),

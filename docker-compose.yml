@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: final-version-backend-3
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8018:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: "https://vvhs.studentinfo.in"
+    container_name: final-version-frontend-3
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3018:80"

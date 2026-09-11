@@ -23,11 +23,12 @@ logger = logging.getLogger(__name__)
 
 @router.post("/attendance")
 async def mark_attendance(data: AttendanceSubmit):
-    await db.attendance.delete_many({"studentClass": data.studentClass, "section": data.section, "date": data.date})
+    await db.attendance.delete_many({"studentClass": data.studentClass, "section": data.section, "date": data.date, "session": data.session})
     records = []
     for record in data.records:
         att = AttendanceRecord(studentId=record['studentId'], rollNo=record['rollNo'], studentName=record['studentName'],
-                               studentClass=data.studentClass, section=data.section, date=data.date, status=record['status'])
+                               studentClass=data.studentClass, section=data.section, date=data.date, status=record['status'],
+                               session=data.session)
         doc = att.model_dump()
         doc['createdAt'] = doc['createdAt'].isoformat()
         records.append(doc)
@@ -35,7 +36,7 @@ async def mark_attendance(data: AttendanceSubmit):
     return {"message": f"Attendance marked for {len(records)} students"}
 
 @router.get("/attendance")
-async def get_attendance(studentClass: Optional[str] = None, section: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, date: Optional[str] = None, studentId: Optional[str] = None):
+async def get_attendance(studentClass: Optional[str] = None, section: Optional[str] = None, startDate: Optional[str] = None, endDate: Optional[str] = None, date: Optional[str] = None, studentId: Optional[str] = None, session: Optional[str] = None):
     query = {}
     if studentId: query['studentId'] = studentId
     if studentClass: query['studentClass'] = studentClass
@@ -43,17 +44,20 @@ async def get_attendance(studentClass: Optional[str] = None, section: Optional[s
     if date: query['date'] = date
     elif startDate and endDate: query['date'] = {'$gte': startDate, '$lte': endDate}
     elif startDate: query['date'] = startDate
+    if session: query['session'] = session
     return await db.attendance.find(query, {"_id": 0}).to_list(10000)
 
 @router.get("/attendance/export")
-async def export_attendance(studentClass: str, section: str, startDate: str, endDate: str, format: str = 'csv'):
-    records = await db.attendance.find({"studentClass": studentClass, "section": section, "date": {'$gte': startDate, '$lte': endDate}}, {"_id": 0}).to_list(10000)
+async def export_attendance(studentClass: str, section: str, startDate: str, endDate: str, format: str = 'csv', session: Optional[str] = None):
+    query = {"studentClass": studentClass, "section": section, "date": {'$gte': startDate, '$lte': endDate}}
+    if session: query['session'] = session
+    records = await db.attendance.find(query, {"_id": 0}).to_list(10000)
     if format == 'xlsx':
         wb = Workbook()
         ws = wb.active
         ws.title = "Attendance"
-        ws.append(['Roll No', 'Student Name', 'Date', 'Status'])
-        for r in records: ws.append([r['rollNo'], r['studentName'], r['date'], r['status']])
+        ws.append(['Roll No', 'Student Name', 'Date', 'Session', 'Status'])
+        for r in records: ws.append([r['rollNo'], r['studentName'], r['date'], (r.get('session') or '').capitalize(), r['status']])
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
@@ -61,8 +65,8 @@ async def export_attendance(studentClass: str, section: str, startDate: str, end
                                  headers={"Content-Disposition": f"attachment; filename=attendance.xlsx"})
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Roll No', 'Student Name', 'Date', 'Status'])
-    for r in records: writer.writerow([r['rollNo'], r['studentName'], r['date'], r['status']])
+    writer.writerow(['Roll No', 'Student Name', 'Date', 'Session', 'Status'])
+    for r in records: writer.writerow([r['rollNo'], r['studentName'], r['date'], (r.get('session') or '').capitalize(), r['status']])
     output.seek(0)
     return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=attendance.csv"})
 
@@ -75,6 +79,9 @@ async def send_attendance_alerts(data: Dict):
     sent_count = 0
     for record in absent_records:
         class_name = f"{record.get('studentClass', '')}-{record.get('section', '')}"
+        session = record.get('session')
+        if session:
+            class_name = f"{class_name} ({session.capitalize()} Session)"
         mobile = record.get('mobile', '')
         ok = False
         if channel in ("whatsapp", "both") and wa_settings:
@@ -448,6 +455,15 @@ async def get_progress_card(examName: str, studentClass: Optional[str] = None, s
     students = await db.students.find({"id": {"$in": student_ids}}, {"_id": 0}).to_list(10000)
     student_by_id = {s['id']: s for s in students}
 
+    # Attendance % per student (whole history for this student)
+    att_records = await db.attendance.find({"studentId": {"$in": student_ids}}, {"_id": 0, "studentId": 1, "status": 1}).to_list(100000)
+    att_by_student: Dict[str, Dict[str, int]] = {}
+    for a in att_records:
+        d = att_by_student.setdefault(a['studentId'], {"total": 0, "present": 0})
+        d['total'] += 1
+        if a.get('status') == 'present':
+            d['present'] += 1
+
     entries = []
     for sid, student_marks in by_student.items():
         student = student_by_id.get(sid)
@@ -460,10 +476,22 @@ async def get_progress_card(examName: str, studentClass: Optional[str] = None, s
         summary = summary_by_student.get(sid)
         total = summary['total'] if summary and summary.get('total') is not None else sum_marks
         grade = summary['grade'] if summary and summary.get('grade') else _fallback_grade(pct)
+        att = att_by_student.get(sid)
+        attendance_pct = round(att['present'] / att['total'] * 100) if att and att['total'] else None
         entries.append({
             "student": student, "examName": examName, "subjectRows": subject_rows,
             "total": total, "maxTotal": sum_max, "grade": grade,
+            "percentage": round(pct, 2), "attendancePct": attendance_pct,
         })
+
+    # Rank: position by total marks (desc) within this result set
+    ranked = sorted(entries, key=lambda e: e['total'], reverse=True)
+    for pos, e in enumerate(ranked, start=1):
+        e['rank'] = pos
+    total_students = len(entries)
+    for e in entries:
+        e['totalStudents'] = total_students
+
     entries.sort(key=lambda e: str(e['student'].get('rollNo', '')))
 
     school = await db.settings.find_one({"type": "school"}, {"_id": 0})
@@ -603,7 +631,12 @@ async def create_event(event: EventCreate):
         wa_settings = await get_wa_settings() if channel in ("whatsapp", "both") else None
         sms_settings = await get_sms_settings() if channel in ("sms", "both") else None
         if wa_settings or sms_settings:
-            students = await db.students.find({}, {"_id": 0, "mobile": 1}).to_list(10000)
+            stu_query = {}
+            if event.targetClass:
+                stu_query['studentClass'] = event.targetClass
+                if event.targetSection:
+                    stu_query['section'] = event.targetSection
+            students = await db.students.find(stu_query, {"_id": 0, "mobile": 1}).to_list(10000)
             for student in students:
                 if student.get('mobile'):
                     if channel in ("whatsapp", "both") and wa_settings:
@@ -613,9 +646,18 @@ async def create_event(event: EventCreate):
     return obj
 
 @router.get("/events")
-async def get_events(month: Optional[str] = None):
+async def get_events(month: Optional[str] = None, studentClass: Optional[str] = None, section: Optional[str] = None):
     query = {}
     if month: query['date'] = {'$regex': f'^{month}'}
+    if studentClass:
+        # School-wide events (no target) OR events targeting this class
+        class_clause = [
+            {"targetClass": {"$in": [None, ""]}},
+            {"targetClass": studentClass, "targetSection": {"$in": [None, ""]}},
+        ]
+        if section:
+            class_clause.append({"targetClass": studentClass, "targetSection": section})
+        query['$or'] = class_clause
     return await db.events.find(query, {"_id": 0}).to_list(1000)
 
 @router.put("/events/{event_id}")

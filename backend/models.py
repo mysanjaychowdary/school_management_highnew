@@ -61,6 +61,7 @@ class Student(BaseModel):
     feeTerm1: float
     feeTerm2: float
     feeTerm3: float
+    photoUrl: Optional[str] = None
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
     customFields: Dict[str, str] = {}
@@ -79,6 +80,7 @@ class StudentCreate(BaseModel):
     feeTerm1: float
     feeTerm2: float
     feeTerm3: float
+    photoUrl: Optional[str] = None
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
     customFields: Dict[str, str] = {}
@@ -97,10 +99,18 @@ class StudentUpdate(BaseModel):
     feeTerm1: Optional[float] = None
     feeTerm2: Optional[float] = None
     feeTerm3: Optional[float] = None
+    photoUrl: Optional[str] = None
     parentUsername: Optional[str] = None
     parentPassword: Optional[str] = None
     customFields: Optional[Dict[str, str]] = None
     customFeeValues: Optional[Dict[str, float]] = None
+
+class StudentPhotoItem(BaseModel):
+    studentCode: str
+    photoUrl: str  # data:image/... base64 URI
+
+class StudentPhotosBulk(BaseModel):
+    photos: List[StudentPhotoItem]
 
 class CustomFieldDef(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -132,6 +142,7 @@ class AttendanceRecord(BaseModel):
     section: str
     date: str
     status: str
+    session: Optional[Literal["morning", "afternoon"]] = None
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class AttendanceSubmit(BaseModel):
@@ -139,6 +150,10 @@ class AttendanceSubmit(BaseModel):
     section: str
     date: str
     records: List[Dict]
+    session: Optional[Literal["morning", "afternoon"]] = None
+
+class AttendanceModeSettings(BaseModel):
+    sessionAttendance: bool = False
 
 class FeePayment(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -278,6 +293,8 @@ class Event(BaseModel):
     sendNotification: Optional[bool] = False
     attachmentUrl: Optional[str] = None
     attachmentName: Optional[str] = None
+    targetClass: Optional[str] = None   # None/"" = visible to all classes
+    targetSection: Optional[str] = None  # None/"" = all sections of targetClass
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class EventCreate(BaseModel):
@@ -287,6 +304,8 @@ class EventCreate(BaseModel):
     sendNotification: Optional[bool] = False
     attachmentUrl: Optional[str] = None
     attachmentName: Optional[str] = None
+    targetClass: Optional[str] = None
+    targetSection: Optional[str] = None
 
 class Homework(BaseModel):
     model_config = ConfigDict(extra="ignore")

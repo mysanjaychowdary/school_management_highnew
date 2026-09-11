@@ -96,7 +96,7 @@ const CHANNEL_OPTIONS = [
 const EMPTY_SMS_TPL = { message: '', tpid: '', enabled: true };
 
 const Settings = () => {
-  const { role, refreshDisabledModules } = useAuth();
+  const { role, refreshDisabledModules, refreshAttendanceMode } = useAuth();
   const [loading, setLoading] = useState(true);
   const [savingWA, setSavingWA] = useState(false);
   const [savingSMS, setSavingSMS] = useState(false);
@@ -104,7 +104,9 @@ const Settings = () => {
   const [savingTpl, setSavingTpl] = useState(false);
   const [savingChannel, setSavingChannel] = useState(false);
   const [savingModules, setSavingModules] = useState(false);
+  const [savingAttendanceMode, setSavingAttendanceMode] = useState(false);
   const [disabledModules, setDisabledModules] = useState([]);
+  const [sessionAttendance, setSessionAttendance] = useState(false);
   const [wa, setWa] = useState({ phoneNumberId: '', accessToken: '' });
   const [sms, setSms] = useState({ userid: '', password: '', sender: '', peid: '' });
   const [channel, setChannel] = useState('whatsapp');
@@ -128,7 +130,7 @@ const Settings = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const [waR, smsR, schR, tplR, smsTplR, chR, modR] = await Promise.all([
+      const [waR, smsR, schR, tplR, smsTplR, chR, modR, attR] = await Promise.all([
         api.getWhatsAppSettings(),
         api.getSMSSettings(),
         api.getSchoolSettings(),
@@ -136,6 +138,7 @@ const Settings = () => {
         api.getSMSTemplates(),
         api.getNotificationChannel(),
         api.getEnabledModules(),
+        api.getAttendanceMode(),
       ]);
       setWa(waR.data);
       setSms(smsR.data);
@@ -155,6 +158,7 @@ const Settings = () => {
       });
       setChannel(chR.data.channel || 'whatsapp');
       setDisabledModules(modR.data?.disabledModules || []);
+      setSessionAttendance(!!attR.data?.sessionAttendance);
     } catch (e) { toast.error('Failed to load settings'); }
     finally { setLoading(false); }
   };
@@ -170,6 +174,16 @@ const Settings = () => {
       toast.success('Feature toggles saved');
       refreshDisabledModules();
     } catch (e) { toast.error('Failed'); } finally { setSavingModules(false); }
+  };
+
+  const handleSaveAttendanceMode = async (checked) => {
+    try {
+      setSavingAttendanceMode(true);
+      await api.updateAttendanceMode({ sessionAttendance: checked });
+      setSessionAttendance(checked);
+      toast.success('Attendance mode saved');
+      refreshAttendanceMode();
+    } catch (e) { toast.error('Failed'); } finally { setSavingAttendanceMode(false); }
   };
 
   const handleSaveWA = async (e) => {
@@ -522,6 +536,16 @@ const Settings = () => {
                 <Button data-testid="save-features-btn" onClick={handleSaveModules} disabled={savingModules} className="bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl px-8 active:scale-95 transition-transform">
                   <Save className="w-5 h-5 mr-2" />{savingModules ? 'Saving...' : 'Save'}
                 </Button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-4 sm:p-6 mt-6">
+              <div className="flex items-center justify-between p-3 border border-slate-200 rounded-xl">
+                <div>
+                  <span className="font-bold text-slate-800 text-sm block">Morning & Afternoon Attendance</span>
+                  <span className="text-xs text-slate-500">When on, attendance is taken separately for a morning and an afternoon session each day, with an absence alert sent for each session. When off, attendance stays a single daily mark.</span>
+                </div>
+                <Switch data-testid="session-attendance-toggle" checked={sessionAttendance} disabled={savingAttendanceMode} onCheckedChange={handleSaveAttendanceMode} />
               </div>
             </div>
           </TabsContent>
